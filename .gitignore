@@ -1,0 +1,6 @@
+# Compiled binaries
+/bd
+/cmd/bd/bd
+*.exe
+coverage.out
+.quench/
