@@ -55,6 +55,3 @@ bd create "Approve Q1 roadmap" --type decision --fields '{"outcome":"pending"}'
 go test ./...    # uses go-sqlmock; no running Postgres needed
 ```
 
-## License
-
-See [LICENSE](LICENSE) for details.
