@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"os"
 
-	beadsv1 "github.com/groblegark/kbeads/gen/beads/v1"
+	"github.com/groblegark/kbeads/internal/client"
 	"github.com/spf13/cobra"
 )
 
@@ -17,12 +17,12 @@ var statusCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := context.Background()
 
-		statuses := []string{"open", "in_progress", "deferred", "closed"}
-		counts := make(map[string]int32, len(statuses))
-		var total int32
+		statuses := []string{"open", "in_progress", "blocked", "deferred", "closed"}
+		counts := make(map[string]int, len(statuses))
+		var total int
 
 		for _, s := range statuses {
-			resp, err := client.ListBeads(ctx, &beadsv1.ListBeadsRequest{
+			resp, err := beadsClient.ListBeads(ctx, &client.ListBeadsRequest{
 				Status: []string{s},
 				Limit:  0,
 			})
@@ -30,12 +30,12 @@ var statusCmd = &cobra.Command{
 				fmt.Fprintf(os.Stderr, "Error querying %s beads: %v\n", s, err)
 				os.Exit(1)
 			}
-			counts[s] = resp.GetTotal()
-			total += resp.GetTotal()
+			counts[s] = resp.Total
+			total += resp.Total
 		}
 
 		if jsonOutput {
-			out := map[string]int32{
+			out := map[string]int{
 				"open":        counts["open"],
 				"in_progress": counts["in_progress"],
 				"deferred":    counts["deferred"],

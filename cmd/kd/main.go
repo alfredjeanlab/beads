@@ -6,20 +6,18 @@ import (
 	"os/exec"
 	"strings"
 
-	beadsv1 "github.com/groblegark/kbeads/gen/beads/v1"
-	"github.com/groblegark/kbeads/internal/ui"
+	"github.com/groblegark/kbeads/internal/client"
 	"github.com/spf13/cobra"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 )
 
 var (
 	serverAddr string
+	httpURL    string
+	transport  string
 	jsonOutput bool
 	actor      string
 
-	conn   *grpc.ClientConn
-	client beadsv1.BeadsServiceClient
+	beadsClient client.BeadsClient
 )
 
 func defaultActor() string {
@@ -31,6 +29,13 @@ func defaultActor() string {
 		}
 	}
 	return "unknown"
+}
+
+func defaultHTTPURL() string {
+	if s := os.Getenv("BEADS_HTTP_URL"); s != "" {
+		return s
+	}
+	return "http://localhost:8080"
 }
 
 func defaultServer() string {
@@ -47,31 +52,31 @@ var rootCmd = &cobra.Command{
 	Use:   "kd <command>",
 	Short: "CLI client for the Beads service",
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-		opts := []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())}
-		if tok := activeRemoteToken(); tok != "" {
-			opts = append(opts, grpc.WithUnaryInterceptor(bearerTokenInterceptor(tok)))
+		switch transport {
+		case "http":
+			beadsClient = client.NewHTTPClient(httpURL)
+		case "grpc":
+			c, err := client.NewGRPCClient(serverAddr)
+			if err != nil {
+				return fmt.Errorf("failed to connect to server: %w", err)
+			}
+			beadsClient = c
+		default:
+			return fmt.Errorf("unknown transport %q (must be http or grpc)", transport)
 		}
-		var err error
-		conn, err = grpc.NewClient(serverAddr, opts...)
-		if err != nil {
-			return fmt.Errorf("failed to connect to server: %w", err)
-		}
-		client = beadsv1.NewBeadsServiceClient(conn)
 		return nil
 	},
 	PersistentPostRun: func(cmd *cobra.Command, args []string) {
-		if conn != nil {
-			conn.Close()
+		if beadsClient != nil {
+			beadsClient.Close()
 		}
 	},
 }
 
 func init() {
-	if !ui.ShouldUseColor() {
-		ui.ForceNoColor()
-	}
-
+	rootCmd.PersistentFlags().StringVar(&httpURL, "http-url", defaultHTTPURL(), "HTTP server URL")
 	rootCmd.PersistentFlags().StringVar(&serverAddr, "server", defaultServer(), "gRPC server address")
+	rootCmd.PersistentFlags().StringVar(&transport, "transport", "http", "transport protocol (http or grpc)")
 	rootCmd.PersistentFlags().BoolVar(&jsonOutput, "json", false, "output as JSON")
 	rootCmd.PersistentFlags().StringVar(&actor, "actor", defaultActor(), "actor name for created_by fields")
 

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 
-	beadsv1 "github.com/groblegark/kbeads/gen/beads/v1"
 	"github.com/spf13/cobra"
 )
 
@@ -24,10 +23,7 @@ var labelAddCmd = &cobra.Command{
 		labels := args[1:]
 
 		for _, label := range labels {
-			_, err := client.AddLabel(context.Background(), &beadsv1.AddLabelRequest{
-				BeadId: beadID,
-				Label:  label,
-			})
+			_, err := beadsClient.AddLabel(context.Background(), beadID, label)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "Error adding label %q: %v\n", label, err)
 				os.Exit(1)
@@ -48,11 +44,7 @@ var labelRemoveCmd = &cobra.Command{
 		labels := args[1:]
 
 		for _, label := range labels {
-			_, err := client.RemoveLabel(context.Background(), &beadsv1.RemoveLabelRequest{
-				BeadId: beadID,
-				Label:  label,
-			})
-			if err != nil {
+			if err := beadsClient.RemoveLabel(context.Background(), beadID, label); err != nil {
 				fmt.Fprintf(os.Stderr, "Error removing label %q: %v\n", label, err)
 				os.Exit(1)
 			}
