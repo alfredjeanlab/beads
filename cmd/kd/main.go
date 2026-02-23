@@ -6,8 +6,8 @@ import (
 	"os/exec"
 	"strings"
 
-	beadsv1 "github.com/alfredjeanlab/beads/gen/beads/v1"
-	"github.com/alfredjeanlab/beads/internal/ui"
+	beadsv1 "github.com/groblegark/kbeads/gen/beads/v1"
+	"github.com/groblegark/kbeads/internal/ui"
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -44,7 +44,7 @@ func defaultServer() string {
 }
 
 var rootCmd = &cobra.Command{
-	Use:   "bd <command>",
+	Use:   "kd <command>",
 	Short: "CLI client for the Beads service",
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		opts := []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())}

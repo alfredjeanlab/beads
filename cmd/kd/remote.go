@@ -245,7 +245,7 @@ var remoteShowCmd = &cobra.Command{
 			name = args[0]
 		}
 		if name == "" {
-			return fmt.Errorf("no active remote; specify a name or run 'bd remote use <name>'")
+			return fmt.Errorf("no active remote; specify a name or run 'kd remote use <name>'")
 		}
 
 		r, ok := cfg.Remotes[name]

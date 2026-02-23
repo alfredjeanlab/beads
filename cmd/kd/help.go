@@ -6,7 +6,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/alfredjeanlab/beads/internal/ui"
+	"github.com/groblegark/kbeads/internal/ui"
 	"github.com/spf13/cobra"
 )
 
