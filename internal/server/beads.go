@@ -107,6 +107,10 @@ func (s *BeadsServer) createBead(ctx context.Context, in createBeadInput) (*mode
 
 	s.recordAndPublish(ctx, events.TopicBeadCreated, bead.ID, bead.CreatedBy, events.BeadCreated{Bead: bead})
 
+	if bead.Type == model.TypeAdvice {
+		s.recordAndPublish(ctx, events.TopicAdviceCreated, bead.ID, bead.CreatedBy, events.AdviceCreated{Bead: bead})
+	}
+
 	return bead, nil
 }
 
@@ -337,6 +341,13 @@ func (s *BeadsServer) updateBead(ctx context.Context, id string, in updateBeadIn
 		Changes: changes,
 	})
 
+	if bead.Type == model.TypeAdvice {
+		s.recordAndPublish(ctx, events.TopicAdviceUpdated, bead.ID, "", events.AdviceUpdated{
+			Bead:    bead,
+			Changes: changes,
+		})
+	}
+
 	return bead, nil
 }
 
@@ -455,6 +466,10 @@ func (s *BeadsServer) CloseBead(ctx context.Context, req *beadsv1.CloseBeadReque
 		Bead:     bead,
 		ClosedBy: req.GetClosedBy(),
 	})
+
+	if bead.Type == model.TypeAdvice {
+		s.recordAndPublish(ctx, events.TopicAdviceDeleted, bead.ID, req.GetClosedBy(), events.AdviceDeleted{BeadID: bead.ID})
+	}
 
 	return &beadsv1.CloseBeadResponse{Bead: beadToProto(bead)}, nil
 }

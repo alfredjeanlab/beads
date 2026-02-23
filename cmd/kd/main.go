@@ -115,6 +115,7 @@ func init() {
 	rootCmd.AddCommand(contextCmd)
 	rootCmd.AddCommand(watchCmd)
 	rootCmd.AddCommand(treeCmd)
+	rootCmd.AddCommand(adviceCmd)
 
 	// System
 	rootCmd.AddCommand(serveCmd)
