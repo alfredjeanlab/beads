@@ -71,6 +71,9 @@ var watchCmd = &cobra.Command{
 
 		// 5. Choose event-driven or polling mode.
 		natsURL := os.Getenv("BEADS_NATS_URL")
+		if natsURL == "" {
+			natsURL = activeRemoteNATSURL()
+		}
 		if natsURL != "" {
 			return watchNATS(ctx, natsURL, req, seen)
 		}

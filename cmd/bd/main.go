@@ -36,6 +36,9 @@ func defaultServer() string {
 	if s := os.Getenv("BEADS_SERVER"); s != "" {
 		return s
 	}
+	if u := activeRemoteURL(); u != "" {
+		return u
+	}
 	return "localhost:9090"
 }
 
@@ -43,8 +46,12 @@ var rootCmd = &cobra.Command{
 	Use:   "bd",
 	Short: "CLI client for the Beads service",
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		opts := []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())}
+		if tok := activeRemoteToken(); tok != "" {
+			opts = append(opts, grpc.WithUnaryInterceptor(bearerTokenInterceptor(tok)))
+		}
 		var err error
-		conn, err = grpc.NewClient(serverAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+		conn, err = grpc.NewClient(serverAddr, opts...)
 		if err != nil {
 			return fmt.Errorf("failed to connect to server: %w", err)
 		}
@@ -89,6 +96,7 @@ func init() {
 	rootCmd.AddCommand(viewCmd)
 	rootCmd.AddCommand(watchCmd)
 	rootCmd.AddCommand(contextCmd)
+	rootCmd.AddCommand(remoteCmd)
 }
 
 func main() {
