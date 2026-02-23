@@ -7,14 +7,13 @@
 package beadsv1
 
 import (
-	reflect "reflect"
-	sync "sync"
-	unsafe "unsafe"
-
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	wrapperspb "google.golang.org/protobuf/types/known/wrapperspb"
+	reflect "reflect"
+	sync "sync"
+	unsafe "unsafe"
 )
 
 const (
@@ -313,6 +312,7 @@ type ListBeadsRequest struct {
 	Limit         int32                  `protobuf:"varint,8,opt,name=limit,proto3" json:"limit,omitempty"`
 	Offset        int32                  `protobuf:"varint,9,opt,name=offset,proto3" json:"offset,omitempty"`
 	Sort          string                 `protobuf:"bytes,10,opt,name=sort,proto3" json:"sort,omitempty"`
+	FieldFilters  map[string]string      `protobuf:"bytes,11,rep,name=field_filters,json=fieldFilters,proto3" json:"field_filters,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -415,6 +415,13 @@ func (x *ListBeadsRequest) GetSort() string {
 		return x.Sort
 	}
 	return ""
+}
+
+func (x *ListBeadsRequest) GetFieldFilters() map[string]string {
+	if x != nil {
+		return x.FieldFilters
+	}
+	return nil
 }
 
 // ListBeadsResponse returns a page of beads and the total count.
@@ -1725,7 +1732,7 @@ const file_beads_v1_beads_proto_rawDesc = "" +
 	"\x0eGetBeadRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\"5\n" +
 	"\x0fGetBeadResponse\x12\"\n" +
-	"\x04bead\x18\x01 \x01(\v2\x0e.beads.v1.BeadR\x04bead\"\x99\x02\n" +
+	"\x04bead\x18\x01 \x01(\v2\x0e.beads.v1.BeadR\x04bead\"\xad\x03\n" +
 	"\x10ListBeadsRequest\x12\x16\n" +
 	"\x06status\x18\x01 \x03(\tR\x06status\x12\x12\n" +
 	"\x04type\x18\x02 \x03(\tR\x04type\x12\x12\n" +
@@ -1737,7 +1744,11 @@ const file_beads_v1_beads_proto_rawDesc = "" +
 	"\x05limit\x18\b \x01(\x05R\x05limit\x12\x16\n" +
 	"\x06offset\x18\t \x01(\x05R\x06offset\x12\x12\n" +
 	"\x04sort\x18\n" +
-	" \x01(\tR\x04sort\"O\n" +
+	" \x01(\tR\x04sort\x12Q\n" +
+	"\rfield_filters\x18\v \x03(\v2,.beads.v1.ListBeadsRequest.FieldFiltersEntryR\ffieldFilters\x1a?\n" +
+	"\x11FieldFiltersEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"O\n" +
 	"\x11ListBeadsResponse\x12$\n" +
 	"\x05beads\x18\x01 \x03(\v2\x0e.beads.v1.BeadR\x05beads\x12\x14\n" +
 	"\x05total\x18\x02 \x01(\x05R\x05total\"\xa2\x04\n" +
@@ -1821,7 +1832,7 @@ const file_beads_v1_beads_proto_rawDesc = "" +
 	"\x10GetEventsRequest\x12\x17\n" +
 	"\abead_id\x18\x01 \x01(\tR\x06beadId\"<\n" +
 	"\x11GetEventsResponse\x12'\n" +
-	"\x06events\x18\x01 \x03(\v2\x0f.beads.v1.EventR\x06eventsB/Z-github.com/alfredjeanlab/beads/gen/beads/v1;beadsv1b\x06proto3"
+	"\x06events\x18\x01 \x03(\v2\x0f.beads.v1.EventR\x06eventsB5Z3github.com/alfredjeanlab/beads/gen/beads/v1;beadsv1b\x06proto3"
 
 var (
 	file_beads_v1_beads_proto_rawDescOnce sync.Once
@@ -1835,7 +1846,7 @@ func file_beads_v1_beads_proto_rawDescGZIP() []byte {
 	return file_beads_v1_beads_proto_rawDescData
 }
 
-var file_beads_v1_beads_proto_msgTypes = make([]protoimpl.MessageInfo, 30)
+var file_beads_v1_beads_proto_msgTypes = make([]protoimpl.MessageInfo, 31)
 var file_beads_v1_beads_proto_goTypes = []any{
 	(*CreateBeadRequest)(nil),        // 0: beads.v1.CreateBeadRequest
 	(*CreateBeadResponse)(nil),       // 1: beads.v1.CreateBeadResponse
@@ -1867,35 +1878,37 @@ var file_beads_v1_beads_proto_goTypes = []any{
 	(*GetCommentsResponse)(nil),      // 27: beads.v1.GetCommentsResponse
 	(*GetEventsRequest)(nil),         // 28: beads.v1.GetEventsRequest
 	(*GetEventsResponse)(nil),        // 29: beads.v1.GetEventsResponse
-	(*timestamppb.Timestamp)(nil),    // 30: google.protobuf.Timestamp
-	(*Bead)(nil),                     // 31: beads.v1.Bead
-	(*wrapperspb.Int32Value)(nil),    // 32: google.protobuf.Int32Value
-	(*Dependency)(nil),               // 33: beads.v1.Dependency
-	(*Comment)(nil),                  // 34: beads.v1.Comment
-	(*Event)(nil),                    // 35: beads.v1.Event
+	nil,                              // 30: beads.v1.ListBeadsRequest.FieldFiltersEntry
+	(*timestamppb.Timestamp)(nil),    // 31: google.protobuf.Timestamp
+	(*Bead)(nil),                     // 32: beads.v1.Bead
+	(*wrapperspb.Int32Value)(nil),    // 33: google.protobuf.Int32Value
+	(*Dependency)(nil),               // 34: beads.v1.Dependency
+	(*Comment)(nil),                  // 35: beads.v1.Comment
+	(*Event)(nil),                    // 36: beads.v1.Event
 }
 var file_beads_v1_beads_proto_depIdxs = []int32{
-	30, // 0: beads.v1.CreateBeadRequest.due_at:type_name -> google.protobuf.Timestamp
-	30, // 1: beads.v1.CreateBeadRequest.defer_until:type_name -> google.protobuf.Timestamp
-	31, // 2: beads.v1.CreateBeadResponse.bead:type_name -> beads.v1.Bead
-	31, // 3: beads.v1.GetBeadResponse.bead:type_name -> beads.v1.Bead
-	32, // 4: beads.v1.ListBeadsRequest.priority:type_name -> google.protobuf.Int32Value
-	31, // 5: beads.v1.ListBeadsResponse.beads:type_name -> beads.v1.Bead
-	30, // 6: beads.v1.UpdateBeadRequest.due_at:type_name -> google.protobuf.Timestamp
-	30, // 7: beads.v1.UpdateBeadRequest.defer_until:type_name -> google.protobuf.Timestamp
-	31, // 8: beads.v1.UpdateBeadResponse.bead:type_name -> beads.v1.Bead
-	31, // 9: beads.v1.CloseBeadResponse.bead:type_name -> beads.v1.Bead
-	33, // 10: beads.v1.AddDependencyResponse.dependency:type_name -> beads.v1.Dependency
-	33, // 11: beads.v1.GetDependenciesResponse.dependencies:type_name -> beads.v1.Dependency
-	31, // 12: beads.v1.AddLabelResponse.bead:type_name -> beads.v1.Bead
-	34, // 13: beads.v1.AddCommentResponse.comment:type_name -> beads.v1.Comment
-	34, // 14: beads.v1.GetCommentsResponse.comments:type_name -> beads.v1.Comment
-	35, // 15: beads.v1.GetEventsResponse.events:type_name -> beads.v1.Event
-	16, // [16:16] is the sub-list for method output_type
-	16, // [16:16] is the sub-list for method input_type
-	16, // [16:16] is the sub-list for extension type_name
-	16, // [16:16] is the sub-list for extension extendee
-	0,  // [0:16] is the sub-list for field type_name
+	31, // 0: beads.v1.CreateBeadRequest.due_at:type_name -> google.protobuf.Timestamp
+	31, // 1: beads.v1.CreateBeadRequest.defer_until:type_name -> google.protobuf.Timestamp
+	32, // 2: beads.v1.CreateBeadResponse.bead:type_name -> beads.v1.Bead
+	32, // 3: beads.v1.GetBeadResponse.bead:type_name -> beads.v1.Bead
+	33, // 4: beads.v1.ListBeadsRequest.priority:type_name -> google.protobuf.Int32Value
+	30, // 5: beads.v1.ListBeadsRequest.field_filters:type_name -> beads.v1.ListBeadsRequest.FieldFiltersEntry
+	32, // 6: beads.v1.ListBeadsResponse.beads:type_name -> beads.v1.Bead
+	31, // 7: beads.v1.UpdateBeadRequest.due_at:type_name -> google.protobuf.Timestamp
+	31, // 8: beads.v1.UpdateBeadRequest.defer_until:type_name -> google.protobuf.Timestamp
+	32, // 9: beads.v1.UpdateBeadResponse.bead:type_name -> beads.v1.Bead
+	32, // 10: beads.v1.CloseBeadResponse.bead:type_name -> beads.v1.Bead
+	34, // 11: beads.v1.AddDependencyResponse.dependency:type_name -> beads.v1.Dependency
+	34, // 12: beads.v1.GetDependenciesResponse.dependencies:type_name -> beads.v1.Dependency
+	32, // 13: beads.v1.AddLabelResponse.bead:type_name -> beads.v1.Bead
+	35, // 14: beads.v1.AddCommentResponse.comment:type_name -> beads.v1.Comment
+	35, // 15: beads.v1.GetCommentsResponse.comments:type_name -> beads.v1.Comment
+	36, // 16: beads.v1.GetEventsResponse.events:type_name -> beads.v1.Event
+	17, // [17:17] is the sub-list for method output_type
+	17, // [17:17] is the sub-list for method input_type
+	17, // [17:17] is the sub-list for extension type_name
+	17, // [17:17] is the sub-list for extension extendee
+	0,  // [0:17] is the sub-list for field type_name
 }
 
 func init() { file_beads_v1_beads_proto_init() }
@@ -1912,7 +1925,7 @@ func file_beads_v1_beads_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_beads_v1_beads_proto_rawDesc), len(file_beads_v1_beads_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   30,
+			NumMessages:   31,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

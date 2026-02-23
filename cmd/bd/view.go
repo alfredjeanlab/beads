@@ -22,13 +22,14 @@ type viewConfig struct {
 }
 
 type viewFilter struct {
-	Status   []string `json:"status"`
-	Type     []string `json:"type"`
-	Kind     []string `json:"kind"`
-	Labels   []string `json:"labels"`
-	Assignee string   `json:"assignee"`
-	Search   string   `json:"search"`
-	Priority *int32   `json:"priority"`
+	Status   []string          `json:"status"`
+	Type     []string          `json:"type"`
+	Kind     []string          `json:"kind"`
+	Labels   []string          `json:"labels"`
+	Assignee string            `json:"assignee"`
+	Search   string            `json:"search"`
+	Priority *int32            `json:"priority"`
+	Fields   map[string]string `json:"fields,omitempty"`
 }
 
 var viewCmd = &cobra.Command{
@@ -68,6 +69,9 @@ var viewCmd = &cobra.Command{
 		}
 		if vc.Filter.Priority != nil {
 			req.Priority = wrapperspb.Int32(*vc.Filter.Priority)
+		}
+		if len(vc.Filter.Fields) > 0 {
+			req.FieldFilters = vc.Filter.Fields
 		}
 		if limitOverride > 0 {
 			req.Limit = limitOverride

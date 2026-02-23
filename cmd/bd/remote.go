@@ -23,9 +23,10 @@ type RemotesConfig struct {
 
 // Remote is a named server profile.
 type Remote struct {
-	URL     string `toml:"url"`
-	Token   string `toml:"token,omitempty"`
-	NATSURL string `toml:"nats_url,omitempty"`
+	URL         string `toml:"url"`
+	Token       string `toml:"token,omitempty"`
+	NATSURL     string `toml:"nats_url,omitempty"`
+	Description string `toml:"description,omitempty"`
 }
 
 func remoteConfigPath() (string, error) {
@@ -124,12 +125,13 @@ var remoteAddCmd = &cobra.Command{
 		name, url := args[0], args[1]
 		token, _ := cmd.Flags().GetString("token")
 		natsURL, _ := cmd.Flags().GetString("nats")
+		desc, _ := cmd.Flags().GetString("description")
 
 		cfg, err := loadRemotesConfig()
 		if err != nil {
 			return err
 		}
-		cfg.Remotes[name] = Remote{URL: url, Token: token, NATSURL: natsURL}
+		cfg.Remotes[name] = Remote{URL: url, Token: token, NATSURL: natsURL, Description: desc}
 		if err := saveRemotesConfig(cfg); err != nil {
 			return err
 		}
@@ -178,7 +180,7 @@ var remoteListCmd = &cobra.Command{
 			return nil
 		}
 		w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
-		fmt.Fprintln(w, "  NAME\tURL\tTOKEN")
+		fmt.Fprintln(w, "  NAME\tURL\tTOKEN\tDESCRIPTION")
 		for name, r := range cfg.Remotes {
 			marker := "  "
 			if name == cfg.Active {
@@ -192,7 +194,7 @@ var remoteListCmd = &cobra.Command{
 					token = r.Token
 				}
 			}
-			fmt.Fprintf(w, "%s%s\t%s\t%s\n", marker, name, r.URL, token)
+			fmt.Fprintf(w, "%s%s\t%s\t%s\t%s\n", marker, name, r.URL, token, r.Description)
 		}
 		return w.Flush()
 	},
@@ -257,6 +259,9 @@ var remoteShowCmd = &cobra.Command{
 			active = " (active)"
 		}
 		fmt.Fprintf(w, "name:\t%s%s\n", name, active)
+		if r.Description != "" {
+			fmt.Fprintf(w, "description:\t%s\n", r.Description)
+		}
 		fmt.Fprintf(w, "url:\t%s\n", r.URL)
 		if r.Token != "" {
 			masked := r.Token
@@ -275,6 +280,7 @@ var remoteShowCmd = &cobra.Command{
 func init() {
 	remoteAddCmd.Flags().String("token", "", "bearer token for authentication")
 	remoteAddCmd.Flags().String("nats", "", "NATS URL for event streaming")
+	remoteAddCmd.Flags().String("description", "", "human-readable description of the remote")
 
 	remoteCmd.AddCommand(remoteAddCmd)
 	remoteCmd.AddCommand(remoteRemoveCmd)

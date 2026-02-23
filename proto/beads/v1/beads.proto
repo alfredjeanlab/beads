@@ -50,6 +50,7 @@ message ListBeadsRequest {
   int32 limit = 8;
   int32 offset = 9;
   string sort = 10;
+  map<string, string> field_filters = 11;
 }
 
 // ListBeadsResponse returns a page of beads and the total count.

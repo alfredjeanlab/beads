@@ -180,6 +180,9 @@ func (s *BeadsServer) ListBeads(ctx context.Context, req *beadsv1.ListBeadsReque
 		p := int(req.GetPriority().GetValue())
 		filter.Priority = &p
 	}
+	if len(req.GetFieldFilters()) > 0 {
+		filter.Fields = req.GetFieldFilters()
+	}
 
 	beads, total, err := s.store.ListBeads(ctx, filter)
 	if err != nil {

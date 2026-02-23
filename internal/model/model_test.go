@@ -75,7 +75,6 @@ func TestStatus_IsValid(t *testing.T) {
 	}{
 		{StatusOpen, true},
 		{StatusInProgress, true},
-		{StatusBlocked, true},
 		{StatusDeferred, true},
 		{StatusClosed, true},
 		{Status(""), false},

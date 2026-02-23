@@ -55,6 +55,9 @@ var watchCmd = &cobra.Command{
 		if vc.Filter.Priority != nil {
 			req.Priority = wrapperspb.Int32(*vc.Filter.Priority)
 		}
+		if len(vc.Filter.Fields) > 0 {
+			req.FieldFilters = vc.Filter.Fields
+		}
 
 		// 3. Setup signal handling.
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)

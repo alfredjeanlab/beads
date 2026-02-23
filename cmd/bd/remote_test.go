@@ -180,6 +180,61 @@ func TestRemoteTokenHandling(t *testing.T) {
 	}
 }
 
+func TestRemoteDescription(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	mustRun := func(fn func() error) {
+		t.Helper()
+		if err := fn(); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if err := remoteAddCmd.Flags().Set("description", "staging cluster"); err != nil {
+		t.Fatalf("set description flag: %v", err)
+	}
+	t.Cleanup(func() { _ = remoteAddCmd.Flags().Set("description", "") })
+
+	mustRun(func() error { return remoteAddCmd.RunE(remoteAddCmd, []string{"stg", "stg.example.com:9090"}) })
+
+	// round-trip through config file
+	cfg, err := loadRemotesConfig()
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if got := cfg.Remotes["stg"].Description; got != "staging cluster" {
+		t.Fatalf("Description = %q, want %q", got, "staging cluster")
+	}
+
+	mustRun(func() error { return remoteUseCmd.RunE(remoteUseCmd, []string{"stg"}) })
+
+	var buf bytes.Buffer
+
+	// list includes description
+	remoteListCmd.SetOut(&buf)
+	mustRun(func() error { return remoteListCmd.RunE(remoteListCmd, nil) })
+	if !strings.Contains(buf.String(), "staging cluster") {
+		t.Errorf("list missing description; got:\n%s", buf.String())
+	}
+
+	// show includes description
+	buf.Reset()
+	remoteShowCmd.SetOut(&buf)
+	mustRun(func() error { return remoteShowCmd.RunE(remoteShowCmd, nil) })
+	if !strings.Contains(buf.String(), "staging cluster") {
+		t.Errorf("show missing description; got:\n%s", buf.String())
+	}
+
+	// show omits description line when empty
+	_ = remoteAddCmd.Flags().Set("description", "")
+	mustRun(func() error { return remoteAddCmd.RunE(remoteAddCmd, []string{"bare", "bare.example.com:9090"}) })
+	buf.Reset()
+	mustRun(func() error { return remoteShowCmd.RunE(remoteShowCmd, []string{"bare"}) })
+	if strings.Contains(buf.String(), "description:") {
+		t.Errorf("show should omit description line when empty; got:\n%s", buf.String())
+	}
+}
+
 func TestRemoteErrorCases(t *testing.T) {
 	tests := []struct {
 		name string

@@ -515,9 +515,9 @@ func TestQueryListBeads(t *testing.T) {
 		},
 		{
 			name:      "FilterByStatus",
-			filter:    model.BeadFilter{Status: []model.Status{model.StatusOpen, model.StatusBlocked}},
+			filter:    model.BeadFilter{Status: []model.Status{model.StatusOpen, model.StatusDeferred}},
 			queryPat:  "SELECT .+ FROM beads WHERE status IN \\(\\$1, \\$2\\) ORDER BY",
-			args:      []driver.Value{"open", "blocked"},
+			args:      []driver.Value{"open", "deferred"},
 			wantCount: 1,
 			wantTotal: 1,
 		},
@@ -579,6 +579,14 @@ func TestQueryListBeads(t *testing.T) {
 			name:     "WithSort",
 			filter:   model.BeadFilter{Sort: "-priority"},
 			queryPat: "SELECT .+ FROM beads ORDER BY priority DESC",
+		},
+		{
+			name:      "FilterByField",
+			filter:    model.BeadFilter{Fields: map[string]string{"sprint": "3"}},
+			queryPat:  "SELECT .+ FROM beads WHERE fields->>\\$1 = \\$2 ORDER BY",
+			args:      []driver.Value{"sprint", "3"},
+			wantCount: 1,
+			wantTotal: 1,
 		},
 		{
 			name:      "CombinedFilters",

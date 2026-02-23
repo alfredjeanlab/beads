@@ -7,12 +7,11 @@
 package beadsv1
 
 import (
+	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
+	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
-
-	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
-	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 )
 
 const (
@@ -402,7 +401,7 @@ const file_beads_v1_config_proto_rawDesc = "" +
 	"\aconfigs\x18\x01 \x03(\v2\x10.beads.v1.ConfigR\aconfigs\"'\n" +
 	"\x13DeleteConfigRequest\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\"\x16\n" +
-	"\x14DeleteConfigResponseB/Z-github.com/alfredjeanlab/beads/gen/beads/v1;beadsv1b\x06proto3"
+	"\x14DeleteConfigResponseB5Z3github.com/alfredjeanlab/beads/gen/beads/v1;beadsv1b\x06proto3"
 
 var (
 	file_beads_v1_config_proto_rawDescOnce sync.Once

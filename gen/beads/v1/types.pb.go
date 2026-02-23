@@ -7,13 +7,12 @@
 package beadsv1
 
 import (
-	reflect "reflect"
-	sync "sync"
-	unsafe "unsafe"
-
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
+	reflect "reflect"
+	sync "sync"
+	unsafe "unsafe"
 )
 
 const (
@@ -611,7 +610,7 @@ const file_beads_v1_types_proto_rawDesc = "" +
 	"\n" +
 	"created_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
 	"\n" +
-	"updated_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAtB/Z-github.com/alfredjeanlab/beads/gen/beads/v1;beadsv1b\x06proto3"
+	"updated_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAtB5Z3github.com/alfredjeanlab/beads/gen/beads/v1;beadsv1b\x06proto3"
 
 var (
 	file_beads_v1_types_proto_rawDescOnce sync.Once

@@ -17,7 +17,7 @@ var statusCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := context.Background()
 
-		statuses := []string{"open", "in_progress", "blocked", "deferred", "closed"}
+		statuses := []string{"open", "in_progress", "deferred", "closed"}
 		counts := make(map[string]int32, len(statuses))
 		var total int32
 
@@ -38,7 +38,6 @@ var statusCmd = &cobra.Command{
 			out := map[string]int32{
 				"open":        counts["open"],
 				"in_progress": counts["in_progress"],
-				"blocked":     counts["blocked"],
 				"deferred":    counts["deferred"],
 				"closed":      counts["closed"],
 				"total":       total,
@@ -53,7 +52,6 @@ var statusCmd = &cobra.Command{
 			fmt.Println("Beads Status")
 			fmt.Printf("  Open:        %d\n", counts["open"])
 			fmt.Printf("  In Progress: %d\n", counts["in_progress"])
-			fmt.Printf("  Blocked:     %d\n", counts["blocked"])
 			fmt.Printf("  Deferred:    %d\n", counts["deferred"])
 			fmt.Printf("  Closed:      %d\n", counts["closed"])
 			fmt.Printf("  Total:       %d\n", total)

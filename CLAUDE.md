@@ -4,7 +4,7 @@ Beads is an event-driven work-tracking system. It manages hierarchical work item
 
 ## Key concepts
 
-- **Bead** — the core work item. Has a kind (`issue`, `data`, `config`), a type (`epic`, `task`, `feature`, `chore`, `bug`, or custom), a status (`open`, `in_progress`, `blocked`, `deferred`, `closed`), and optional metadata, labels, dependencies, and comments.
+- **Bead** — the core work item. Has a kind (`issue`, `data`, `config`), a type (`epic`, `task`, `feature`, `chore`, `bug`, or custom), a status (`open`, `in_progress`, `deferred`, `closed`), and optional metadata, labels, dependencies, and comments.
 - **Store** — persistence interface (`internal/store/store.go`) with a PostgreSQL implementation. All mutations are wrapped in transactions and recorded as events.
 - **Events** — every mutation records an event row in Postgres and publishes to an event bus via the `Publisher` interface (`internal/events`). Publishing is optional; a no-op publisher is used when no bus is configured.
 - **IDs** — nanoid format, prefixed `bd-` (see `internal/idgen`).

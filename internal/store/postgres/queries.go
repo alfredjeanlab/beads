@@ -151,6 +151,13 @@ func queryListBeads(ctx context.Context, db executor, filter model.BeadFilter) (
 		args = append(args, filter.Search)
 	}
 
+	for key, val := range filter.Fields {
+		kp := nextArg()
+		vp := nextArg()
+		whereClauses = append(whereClauses, fmt.Sprintf("fields->>%s = %s", kp, vp))
+		args = append(args, key, val)
+	}
+
 	whereSQL := ""
 	if len(whereClauses) > 0 {
 		whereSQL = " WHERE " + strings.Join(whereClauses, " AND ")

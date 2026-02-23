@@ -21,6 +21,7 @@ var searchCmd = &cobra.Command{
 		beadType, _ := cmd.Flags().GetStringSlice("type")
 		kind, _ := cmd.Flags().GetStringSlice("kind")
 		limit, _ := cmd.Flags().GetInt32("limit")
+		fieldFlags, _ := cmd.Flags().GetStringArray("field")
 
 		req := &beadsv1.ListBeadsRequest{
 			Search: query,
@@ -28,6 +29,18 @@ var searchCmd = &cobra.Command{
 			Type:   beadType,
 			Kind:   kind,
 			Limit:  limit,
+		}
+
+		if len(fieldFlags) > 0 {
+			req.FieldFilters = make(map[string]string, len(fieldFlags))
+			for _, f := range fieldFlags {
+				k, v, ok := splitField(f)
+				if !ok {
+					fmt.Fprintf(os.Stderr, "Error: invalid field filter %q (expected key=value)\n", f)
+					os.Exit(1)
+				}
+				req.FieldFilters[k] = v
+			}
 		}
 
 		resp, err := client.ListBeads(context.Background(), req)
@@ -50,4 +63,5 @@ func init() {
 	searchCmd.Flags().StringSliceP("type", "t", nil, "filter by type (repeatable)")
 	searchCmd.Flags().StringSliceP("kind", "k", nil, "filter by kind (repeatable)")
 	searchCmd.Flags().Int32("limit", 20, "maximum number of results")
+	searchCmd.Flags().StringArrayP("field", "f", nil, "filter by custom field (key=value, repeatable)")
 }
