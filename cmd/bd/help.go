@@ -34,7 +34,7 @@ var (
 func colorizedHelpFunc() func(*cobra.Command, []string) {
 	defaultHelp := func(cmd *cobra.Command, args []string) {
 		cmd.SetOut(cmd.OutOrStdout())
-		cmd.Usage() //nolint:errcheck
+		_ = cmd.Usage()
 	}
 
 	return func(cmd *cobra.Command, args []string) {
@@ -48,7 +48,7 @@ func colorizedHelpFunc() func(*cobra.Command, []string) {
 
 		var buf bytes.Buffer
 		cmd.SetOut(&buf)
-		cmd.Usage() //nolint:errcheck
+		_ = cmd.Usage()
 		cmd.SetOut(orig)
 
 		colorized := colorizeHelpOutput(buf.String())
