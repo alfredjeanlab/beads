@@ -116,6 +116,16 @@ func TestRemoteLifecycle(t *testing.T) {
 		t.Errorf("show by name missing URL; got:\n%s", buf.String())
 	}
 
+	// use with no args should clear active
+	mustRun(func() error { return remoteUseCmd.RunE(remoteUseCmd, nil) })
+	cfg, _ = loadRemotesConfig()
+	if cfg.Active != "" {
+		t.Errorf("Active should be cleared by bare 'use', got %q", cfg.Active)
+	}
+
+	// re-activate for remove test
+	mustRun(func() error { return remoteUseCmd.RunE(remoteUseCmd, []string{"local"}) })
+
 	// remove should clear active
 	mustRun(func() error { return remoteRemoveCmd.RunE(remoteRemoveCmd, []string{"local"}) })
 	cfg, _ = loadRemotesConfig()

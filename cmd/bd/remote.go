@@ -198,16 +198,23 @@ var remoteListCmd = &cobra.Command{
 }
 
 var remoteUseCmd = &cobra.Command{
-	Use:   "use <name>",
-	Short: "Set the active remote",
-	Args:  cobra.ExactArgs(1),
+	Use:   "use [name]",
+	Short: "Set the active remote (no args clears it)",
+	Args:  cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		name := args[0]
-
 		cfg, err := loadRemotesConfig()
 		if err != nil {
 			return err
 		}
+		if len(args) == 0 {
+			cfg.Active = ""
+			if err := saveRemotesConfig(cfg); err != nil {
+				return err
+			}
+			fmt.Println("active remote cleared")
+			return nil
+		}
+		name := args[0]
 		if _, ok := cfg.Remotes[name]; !ok {
 			return fmt.Errorf("remote %q not found", name)
 		}
@@ -221,7 +228,7 @@ var remoteUseCmd = &cobra.Command{
 }
 
 var remoteShowCmd = &cobra.Command{
-	Use:   "show [<name>]",
+	Use:   "show [name]",
 	Short: "Show details for a remote (defaults to active)",
 	Args:  cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
