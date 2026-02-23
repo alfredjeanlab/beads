@@ -10,8 +10,9 @@ import (
 )
 
 var labelCmd = &cobra.Command{
-	Use:   "label",
-	Short: "Manage bead labels",
+	Use:     "label",
+	Short:   "Manage bead labels",
+	GroupID: "beads",
 }
 
 var labelAddCmd = &cobra.Command{

@@ -10,8 +10,9 @@ import (
 )
 
 var doneCmd = &cobra.Command{
-	Use:   "done <id>...",
-	Short: "Mark beads as done and close them",
+	Use:     "done <id>...",
+	Short:   "Mark beads as done and close them",
+	GroupID: "workflow",
 	Args:  cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		comment, _ := cmd.Flags().GetString("comment")

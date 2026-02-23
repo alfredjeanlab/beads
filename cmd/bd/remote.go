@@ -109,8 +109,9 @@ func bearerTokenInterceptor(token string) grpc.UnaryClientInterceptor {
 }
 
 var remoteCmd = &cobra.Command{
-	Use:   "remote",
-	Short: "Manage named server remotes",
+	Use:     "remote",
+	Short:   "Manage named server remotes",
+	GroupID: "system",
 	// Skip the gRPC dial — all remote subcommands are local file operations.
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error { return nil },
 }

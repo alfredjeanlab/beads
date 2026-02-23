@@ -11,8 +11,9 @@ import (
 )
 
 var reopenCmd = &cobra.Command{
-	Use:   "reopen <id>...",
-	Short: "Reopen one or more closed beads",
+	Use:     "reopen <id>...",
+	Short:   "Reopen one or more closed beads",
+	GroupID: "workflow",
 	Args:  cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		for _, id := range args {

@@ -32,8 +32,9 @@ func parseFields(pairs []string) ([]byte, error) {
 }
 
 var createCmd = &cobra.Command{
-	Use:   "create <title>",
-	Short: "Create a new bead",
+	Use:     "create <title>",
+	Short:   "Create a new bead",
+	GroupID: "beads",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		title := args[0]

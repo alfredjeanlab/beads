@@ -10,8 +10,9 @@ import (
 )
 
 var listCmd = &cobra.Command{
-	Use:   "list",
-	Short: "List beads",
+	Use:     "list",
+	Short:   "List beads",
+	GroupID: "beads",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		status, _ := cmd.Flags().GetStringSlice("status")
 		beadType, _ := cmd.Flags().GetStringSlice("type")

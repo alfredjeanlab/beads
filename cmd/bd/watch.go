@@ -17,8 +17,9 @@ import (
 )
 
 var watchCmd = &cobra.Command{
-	Use:   "watch <view-name>",
-	Short: "Watch for beads matching a saved view",
+	Use:     "watch <view-name>",
+	Short:   "Watch for beads matching a saved view",
+	GroupID: "views",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		name := args[0]

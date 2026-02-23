@@ -26,8 +26,9 @@ type contextSection struct {
 }
 
 var contextCmd = &cobra.Command{
-	Use:   "context <name>",
-	Short: "Compose and render a context template",
+	Use:     "context <name>",
+	Short:   "Compose and render a context template",
+	GroupID: "views",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		name := args[0]

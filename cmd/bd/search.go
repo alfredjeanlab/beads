@@ -11,8 +11,9 @@ import (
 )
 
 var searchCmd = &cobra.Command{
-	Use:   "search <query>",
-	Short: "Search beads by text query",
+	Use:     "search <query>",
+	Short:   "Search beads by text query",
+	GroupID: "beads",
 	Args:  cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		query := strings.Join(args, " ")

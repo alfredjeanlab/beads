@@ -11,8 +11,9 @@ import (
 )
 
 var statusCmd = &cobra.Command{
-	Use:   "status",
-	Short: "Show database overview and bead counts by status",
+	Use:     "status",
+	Short:   "Show database overview and bead counts by status",
+	GroupID: "system",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := context.Background()
 

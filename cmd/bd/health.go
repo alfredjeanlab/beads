@@ -11,8 +11,9 @@ import (
 )
 
 var healthCmd = &cobra.Command{
-	Use:   "health",
-	Short: "Check the health of the beads service",
+	Use:     "health",
+	Short:   "Check the health of the beads service",
+	GroupID: "system",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		resp, err := client.Health(context.Background(), &beadsv1.HealthRequest{})
 		if err != nil {

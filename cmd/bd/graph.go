@@ -10,8 +10,9 @@ import (
 )
 
 var graphCmd = &cobra.Command{
-	Use:   "graph <bead-id>",
-	Short: "Show dependency graph as ASCII tree",
+	Use:     "graph <bead-id>",
+	Short:   "Show dependency graph as ASCII tree",
+	GroupID: "views",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		beadID := args[0]

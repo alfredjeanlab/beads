@@ -11,8 +11,9 @@ import (
 )
 
 var claimCmd = &cobra.Command{
-	Use:   "claim <id>",
-	Short: "Claim a bead by assigning it to yourself",
+	Use:     "claim <id>",
+	Short:   "Claim a bead by assigning it to yourself",
+	GroupID: "workflow",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		id := args[0]

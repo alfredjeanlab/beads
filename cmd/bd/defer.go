@@ -12,8 +12,9 @@ import (
 )
 
 var deferCmd = &cobra.Command{
-	Use:   "defer <id>...",
-	Short: "Defer one or more beads",
+	Use:     "defer <id>...",
+	Short:   "Defer one or more beads",
+	GroupID: "workflow",
 	Args:  cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := context.Background()
@@ -55,8 +56,9 @@ var deferCmd = &cobra.Command{
 }
 
 var undeferCmd = &cobra.Command{
-	Use:   "undefer <id>...",
-	Short: "Undefer one or more beads (set status to open, clear defer_until)",
+	Use:     "undefer <id>...",
+	Short:   "Undefer one or more beads (set status to open, clear defer_until)",
+	GroupID: "workflow",
 	Args:  cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := context.Background()

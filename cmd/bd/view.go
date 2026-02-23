@@ -32,8 +32,9 @@ type viewFilter struct {
 }
 
 var viewCmd = &cobra.Command{
-	Use:   "view <name>",
-	Short: "Run a saved view (named query)",
+	Use:     "view <name>",
+	Short:   "Run a saved view (named query)",
+	GroupID: "views",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		name := args[0]

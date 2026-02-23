@@ -10,8 +10,9 @@ import (
 )
 
 var deleteCmd = &cobra.Command{
-	Use:   "delete <id>...",
-	Short: "Delete one or more beads",
+	Use:     "delete <id>...",
+	Short:   "Delete one or more beads",
+	GroupID: "beads",
 	Args:  cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		for _, id := range args {

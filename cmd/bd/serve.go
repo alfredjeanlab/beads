@@ -19,8 +19,9 @@ import (
 )
 
 var serveCmd = &cobra.Command{
-	Use:   "serve",
-	Short: "Start the Beads gRPC server",
+	Use:     "serve",
+	Short:   "Start the Beads gRPC server",
+	GroupID: "system",
 	// Override PersistentPreRunE so we don't create a gRPC client connection.
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error { return nil },
 	RunE: func(cmd *cobra.Command, args []string) error {

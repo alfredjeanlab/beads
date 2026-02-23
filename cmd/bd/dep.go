@@ -12,8 +12,9 @@ import (
 )
 
 var depCmd = &cobra.Command{
-	Use:   "dep",
-	Short: "Manage bead dependencies",
+	Use:     "dep",
+	Short:   "Manage bead dependencies",
+	GroupID: "beads",
 }
 
 var depAddCmd = &cobra.Command{

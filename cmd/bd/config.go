@@ -11,8 +11,9 @@ import (
 )
 
 var configCmd = &cobra.Command{
-	Use:   "config",
-	Short: "Manage configs (type, view, context definitions)",
+	Use:     "config",
+	Short:   "Manage configs (type, view, context definitions)",
+	GroupID: "system",
 }
 
 var configCreateCmd = &cobra.Command{

@@ -12,8 +12,9 @@ import (
 )
 
 var childrenCmd = &cobra.Command{
-	Use:   "children <parent-id>",
-	Short: "List dependencies of a bead (forward dependencies)",
+	Use:     "children <parent-id>",
+	Short:   "List dependencies of a bead (forward dependencies)",
+	GroupID: "views",
 	Long: `List dependencies of a bead. Shows the forward dependencies
 (things this bead depends on) filtered by type.
 

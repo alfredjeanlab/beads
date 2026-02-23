@@ -11,8 +11,9 @@ import (
 )
 
 var updateCmd = &cobra.Command{
-	Use:   "update <id>",
-	Short: "Update a bead",
+	Use:     "update <id>",
+	Short:   "Update a bead",
+	GroupID: "beads",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		id := args[0]

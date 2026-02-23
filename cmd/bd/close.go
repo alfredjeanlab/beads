@@ -10,8 +10,9 @@ import (
 )
 
 var closeCmd = &cobra.Command{
-	Use:   "close <id>...",
-	Short: "Close one or more beads",
+	Use:     "close <id>...",
+	Short:   "Close one or more beads",
+	GroupID: "workflow",
 	Args:  cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		for _, id := range args {

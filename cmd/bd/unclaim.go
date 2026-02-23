@@ -11,8 +11,9 @@ import (
 )
 
 var unclaimCmd = &cobra.Command{
-	Use:   "unclaim <id>...",
-	Short: "Unclaim one or more beads",
+	Use:     "unclaim <id>...",
+	Short:   "Unclaim one or more beads",
+	GroupID: "workflow",
 	Args:  cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		for _, id := range args {

@@ -12,8 +12,9 @@ import (
 )
 
 var commentCmd = &cobra.Command{
-	Use:   "comment",
-	Short: "Manage bead comments",
+	Use:     "comment",
+	Short:   "Manage bead comments",
+	GroupID: "beads",
 }
 
 var commentAddCmd = &cobra.Command{
