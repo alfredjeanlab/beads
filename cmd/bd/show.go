@@ -30,17 +30,7 @@ var showCmd = &cobra.Command{
 			printBeadJSON(bead)
 		} else {
 			printBeadTable(bead)
-			if len(bead.GetComments()) > 0 {
-				fmt.Println()
-				fmt.Println("Comments:")
-				for _, c := range bead.GetComments() {
-					ts := ""
-					if c.GetCreatedAt() != nil {
-						ts = c.GetCreatedAt().AsTime().Format("2006-01-02 15:04:05")
-					}
-					fmt.Printf("  [%s] %s: %s\n", ts, c.GetAuthor(), c.GetText())
-				}
-			}
+			printComments(bead.GetComments())
 		}
 		return nil
 	},

@@ -21,8 +21,9 @@ type contextConfig struct {
 type contextSection struct {
 	Header string   `json:"header"`
 	View   string   `json:"view"`
-	Format string   `json:"format"` // "table" (default), "list", "count"
-	Fields []string `json:"fields"` // for "list" format
+	Format string   `json:"format"` // "table" (default), "list", "count", "detail", "tree"
+	Fields []string `json:"fields"` // for "list" and "detail" formats
+	Depth  int      `json:"depth"`  // for "tree" format; default 3
 }
 
 var contextCmd = &cobra.Command{
@@ -100,11 +101,22 @@ var contextCmd = &cobra.Command{
 				fmt.Printf("%d beads\n", listResp.GetTotal())
 			case "list":
 				printSectionList(listResp.GetBeads(), section.Fields)
+			case "detail":
+				printSectionDetail(listResp.GetBeads(), section.Fields, vc.Deps)
+			case "tree":
+				depth := section.Depth
+				if depth <= 0 {
+					depth = 3
+				}
+				printSectionTree(listResp.GetBeads(), depth, vc.Deps)
 			default: // "table" or empty
 				if len(vc.Columns) > 0 {
 					printBeadListColumns(listResp.GetBeads(), listResp.GetTotal(), vc.Columns)
 				} else {
 					printSectionTable(listResp.GetBeads())
+				}
+				if vc.Deps != nil && len(listResp.GetBeads()) > 0 {
+					printViewDeps(listResp.GetBeads(), vc.Deps)
 				}
 			}
 		}
@@ -145,4 +157,71 @@ func printSectionTable(beads []*beadsv1.Bead) {
 		)
 	}
 	w.Flush()
+}
+
+// printSectionDetail prints each bead with full show-style output.
+func printSectionDetail(beads []*beadsv1.Bead, fields []string, dc *depConfig) {
+	for i, b := range beads {
+		if i > 0 {
+			fmt.Println("---")
+		}
+		// Fetch full bead (with deps + comments).
+		fullResp, err := client.GetBead(context.Background(), &beadsv1.GetBeadRequest{Id: b.GetId()})
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error fetching %s: %v\n", b.GetId(), err)
+			continue
+		}
+		full := fullResp.GetBead()
+		printBeadTableFiltered(full, fields)
+		printComments(full.GetComments())
+		if dc != nil {
+			resolved := resolveBeadDeps(context.Background(), client, full.GetDependencies(), dc.Types)
+			if len(resolved) > 0 {
+				fmt.Println()
+				fmt.Println("  Dependencies:")
+				printDepSubSection(resolved, dc.Fields)
+			}
+		}
+	}
+}
+
+// printSectionTree prints each bead with an ASCII dependency tree.
+func printSectionTree(beads []*beadsv1.Bead, depth int, dc *depConfig) {
+	var depTypes []string
+	if dc != nil {
+		depTypes = dc.Types
+	}
+	for i, b := range beads {
+		if i > 0 {
+			fmt.Println()
+		}
+		// Fetch full bead for embedded deps.
+		fullResp, err := client.GetBead(context.Background(), &beadsv1.GetBeadRequest{Id: b.GetId()})
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error fetching %s: %v\n", b.GetId(), err)
+			continue
+		}
+		full := fullResp.GetBead()
+		fmt.Printf("%s [%s] %s\n", full.GetId(), full.GetStatus(), full.GetTitle())
+		deps := full.GetDependencies()
+		if len(depTypes) > 0 {
+			deps = filterDepsByType(deps, depTypes)
+		}
+		printDepTree(deps, "", depth-1)
+	}
+}
+
+// filterDepsByType returns only dependencies whose type is in the given set.
+func filterDepsByType(deps []*beadsv1.Dependency, types []string) []*beadsv1.Dependency {
+	typeSet := make(map[string]bool, len(types))
+	for _, t := range types {
+		typeSet[t] = true
+	}
+	var filtered []*beadsv1.Dependency
+	for _, d := range deps {
+		if typeSet[d.GetType()] {
+			filtered = append(filtered, d)
+		}
+	}
+	return filtered
 }

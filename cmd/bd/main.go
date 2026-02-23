@@ -109,8 +109,7 @@ func init() {
 	rootCmd.AddCommand(viewCmd)
 	rootCmd.AddCommand(contextCmd)
 	rootCmd.AddCommand(watchCmd)
-	rootCmd.AddCommand(graphCmd)
-	rootCmd.AddCommand(childrenCmd)
+	rootCmd.AddCommand(treeCmd)
 
 	// System
 	rootCmd.AddCommand(serveCmd)

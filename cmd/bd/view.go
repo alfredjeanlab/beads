@@ -13,12 +13,19 @@ import (
 	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
+// depConfig controls optional dependency sub-sections displayed below beads.
+type depConfig struct {
+	Types  []string `json:"types,omitempty"`  // dep types to include; empty = all
+	Fields []string `json:"fields,omitempty"` // fields of resolved target bead; default: id,title,status
+}
+
 // viewConfig is the client-side interpretation of a view:{name} config value.
 type viewConfig struct {
 	Filter  viewFilter `json:"filter"`
 	Sort    string     `json:"sort"`
 	Columns []string   `json:"columns"`
 	Limit   int32      `json:"limit"`
+	Deps    *depConfig `json:"deps,omitempty"`
 }
 
 type viewFilter struct {
@@ -92,6 +99,11 @@ var viewCmd = &cobra.Command{
 		} else {
 			printBeadListTable(listResp.GetBeads(), listResp.GetTotal())
 		}
+
+		// 5. Optional dependency sub-sections.
+		if !jsonOutput && vc.Deps != nil && len(listResp.GetBeads()) > 0 {
+			printViewDeps(listResp.GetBeads(), vc.Deps)
+		}
 		return nil
 	},
 }
@@ -153,6 +165,20 @@ func beadField(b *beadsv1.Bead, col string) string {
 		return strings.Join(b.GetLabels(), ",")
 	default:
 		return ""
+	}
+}
+
+// printViewDeps prints dependency sub-sections for each bead in the list.
+func printViewDeps(beads []*beadsv1.Bead, dc *depConfig) {
+	fmt.Println()
+	for _, b := range beads {
+		deps, err := fetchAndResolveDeps(context.Background(), client, b.GetId(), dc.Types)
+		if err != nil || len(deps) == 0 {
+			continue
+		}
+		fmt.Printf("  %s dependencies:\n", b.GetId())
+		printDepSubSection(deps, dc.Fields)
+		fmt.Println()
 	}
 }
 
