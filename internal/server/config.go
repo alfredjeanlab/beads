@@ -57,6 +57,8 @@ var builtinConfigs = map[string]*model.Config{
 			{"name": "jack_rig",             "type": "string"}
 		]
 	}`)},
+	"type:mail":     {Key: "type:mail", Value: json.RawMessage(`{"kind":"data","fields":[]}`)},
+	"type:agent":    {Key: "type:agent", Value: json.RawMessage(`{"kind":"data","fields":[]}`)},
 	"type:decision": {Key: "type:decision", Value: json.RawMessage(`{
 		"kind": "data",
 		"fields": [
