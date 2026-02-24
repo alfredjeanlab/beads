@@ -130,60 +130,77 @@ func runAgentStart(cmd *cobra.Command, args []string) error {
 // ── --local ───────────────────────────────────────────────────────────────
 
 func runLocal(ctx context.Context, agentName, agentBeadID, role, dir, agentCommand string) error {
-	// Find a free port for coop.
+	// Find a free port for coop (health probe gets port+1).
 	coopPort, err := freePort()
 	if err != nil {
 		return fmt.Errorf("find free port: %w", err)
 	}
-	coopAddr := fmt.Sprintf("http://localhost:%d", coopPort)
+	coopURL := fmt.Sprintf("http://127.0.0.1:%d", coopPort)
 	fmt.Printf("[kd agent start] Starting coop on port %d...\n", coopPort)
 
 	// Build env for the coop+claude subprocess.
-	env := localAgentEnv(agentName, agentBeadID, role, dir, coopAddr)
+	env := localAgentEnv(agentName, agentBeadID, role, dir, coopURL)
 
-	// Build coop command: coop --agent=claude --port=<N> -- sh -c '<agentCommand>'
-	// Wrap in sh -c so shell quoting in --command is handled correctly.
-	coopArgs := []string{
+	// Start coop as a background daemon (no stdin/stdout — we attach separately).
+	// Wrap command in sh -c so shell quoting is handled correctly.
+	coopProc := exec.CommandContext(ctx, "coop",
 		"--agent=claude",
 		fmt.Sprintf("--port=%d", coopPort),
 		fmt.Sprintf("--port-health=%d", coopPort+1),
-		"--cols=200",
-		"--rows=50",
-		"--",
-		"sh", "-c", agentCommand,
-	}
-
-	coopProc := exec.CommandContext(ctx, "coop", coopArgs...)
+		"--cols=220", "--rows=50",
+		"--", "sh", "-c", agentCommand,
+	)
 	coopProc.Dir = dir
 	coopProc.Env = env
-	coopProc.Stdout = os.Stdout
+	// Route coop daemon logs to stderr so they don't pollute the terminal.
+	coopProc.Stdout = os.Stderr
 	coopProc.Stderr = os.Stderr
-	coopProc.Stdin = os.Stdin
 
 	if err := coopProc.Start(); err != nil {
 		return fmt.Errorf("start coop: %w", err)
 	}
 	fmt.Printf("[kd agent start] Coop started (pid %d)\n", coopProc.Process.Pid)
 
-	// 2. Wait for coop health.
-	healthURL := fmt.Sprintf("http://localhost:%d/api/v1/health", coopPort+1)
+	// Ensure coop is killed if we exit early.
+	defer func() {
+		if coopProc.ProcessState == nil {
+			_ = coopProc.Process.Kill()
+			_ = coopProc.Wait()
+		}
+	}()
+
+	// Wait for coop health.
+	healthURL := fmt.Sprintf("http://127.0.0.1:%d/api/v1/health", coopPort+1)
 	if err := waitForHealth(ctx, healthURL, 30*time.Second); err != nil {
-		_ = coopProc.Process.Kill()
 		return fmt.Errorf("coop health check: %w", err)
 	}
 
-	// 3. Emit SessionStart hook → registers in presence tracker.
+	// Emit SessionStart hook → registers in presence tracker.
 	if err := emitHook(ctx, agentBeadID, agentName, "SessionStart", dir); err != nil {
 		fmt.Fprintf(os.Stderr, "[kd agent start] warning: SessionStart emit failed: %v\n", err)
 	}
 
-	// 4. Start heartbeat in background.
+	// Start heartbeat in background.
 	go heartbeatLoop(ctx, agentBeadID, agentName, dir)
 
-	// 5. Wait for coop to exit.
+	// Attach an interactive terminal. This is the foreground process the user
+	// interacts with. Detach with ctrl-\\ (or whatever coop's detach key is);
+	// the coop session keeps running in the background.
+	fmt.Printf("[kd agent start] Attaching to session (detach: ctrl-\\ )...\n")
+	attachProc := exec.CommandContext(ctx, "coop", "attach", coopURL)
+	attachProc.Stdin = os.Stdin
+	attachProc.Stdout = os.Stdout
+	attachProc.Stderr = os.Stderr
+	_ = attachProc.Run() // ignore attach exit code — user may detach intentionally
+
+	// After detach: wait for coop session to finish naturally (claude exits).
+	fmt.Printf("[kd agent start] Detached. Coop session continues in background.\n")
+	fmt.Printf("[kd agent start] Re-attach: coop attach %s\n", coopURL)
+	fmt.Printf("[kd agent start] Agent bead: %s\n", agentBeadID)
+
 	waitErr := coopProc.Wait()
 
-	// 6. Emit Stop hook (best-effort).
+	// Emit Stop hook (best-effort).
 	stopCtx, stopCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer stopCancel()
 	_ = emitHook(stopCtx, agentBeadID, agentName, "Stop", dir)
