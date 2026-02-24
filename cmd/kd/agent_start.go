@@ -48,6 +48,7 @@ The agent is registered with the kbeads server on startup and appears in
 func init() {
 	agentCmd.AddCommand(agentStartCmd)
 
+	agentStartCmd.Flags().Bool("k8s", false, "Run as K8s pod entrypoint (replaces entrypoint.sh)")
 	agentStartCmd.Flags().Bool("local", false, "Run agent on the host via coop (attached)")
 	agentStartCmd.Flags().Bool("docker", false, "Run agent in a Docker container")
 	agentStartCmd.Flags().String("name", "", "Agent name (default: derived from hostname)")
@@ -60,11 +61,16 @@ func init() {
 }
 
 func runAgentStart(cmd *cobra.Command, args []string) error {
+	isK8s, _ := cmd.Flags().GetBool("k8s")
+	if isK8s {
+		return runAgentStartK8s(cmd, args)
+	}
+
 	isLocal, _ := cmd.Flags().GetBool("local")
 	isDocker, _ := cmd.Flags().GetBool("docker")
 
 	if isLocal == isDocker {
-		return fmt.Errorf("specify exactly one of --local or --docker")
+		return fmt.Errorf("specify exactly one of --local, --docker, or --k8s")
 	}
 
 	agentName, _ := cmd.Flags().GetString("name")
