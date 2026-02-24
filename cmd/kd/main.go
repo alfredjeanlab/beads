@@ -136,6 +136,7 @@ func init() {
 	rootCmd.AddCommand(setupCmd)
 	rootCmd.AddCommand(newsCmd)
 	rootCmd.AddCommand(agentCmd)
+	rootCmd.AddCommand(hookCmd)
 
 	// System
 	rootCmd.AddCommand(serveCmd)

@@ -1,18 +1,18 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 	"os/signal"
 	"strings"
 	"time"
 
 	"github.com/groblegark/kbeads/internal/client"
-	"github.com/groblegark/kbeads/internal/events"
 	"github.com/groblegark/kbeads/internal/model"
-	"github.com/nats-io/nats.go"
 	"github.com/spf13/cobra"
 )
 
@@ -28,24 +28,6 @@ func resolveAgentBeadID(ctx context.Context) string {
 		actorName = actor
 	}
 	return resolveAgentByActor(ctx, actorName, "")
-}
-
-// publishDecisionEvent publishes a NATS event if NATS is configured.
-// Errors are silently ignored — NATS publishing is best-effort.
-func publishDecisionEvent(ctx context.Context, topic string, payload any) {
-	natsURL := os.Getenv("BEADS_NATS_URL")
-	if natsURL == "" {
-		natsURL = os.Getenv("COOP_NATS_URL")
-	}
-	if natsURL == "" {
-		return
-	}
-	pub, err := events.NewNATSPublisher(natsURL)
-	if err != nil {
-		return
-	}
-	defer pub.Close()
-	_ = pub.Publish(ctx, topic, payload)
 }
 
 var decisionCmd = &cobra.Command{
@@ -95,15 +77,6 @@ var decisionCreateCmd = &cobra.Command{
 			fields["requesting_agent_bead_id"] = agentID
 		}
 
-		// Count options for NATS event payload.
-		optionsCount := 0
-		if optionsJSON != "" {
-			var opts []any
-			if err := json.Unmarshal([]byte(optionsJSON), &opts); err == nil {
-				optionsCount = len(opts)
-			}
-		}
-
 		fieldsJSON, err := json.Marshal(fields)
 		if err != nil {
 			return fmt.Errorf("encoding fields: %w", err)
@@ -122,17 +95,6 @@ var decisionCreateCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("creating decision: %w", err)
 		}
-
-		// Publish NATS event after successful creation.
-		publishDecisionEvent(context.Background(),
-			fmt.Sprintf("decisions.%s.DecisionCreated", requestedBy),
-			map[string]any{
-				"bead_id":       bead.ID,
-				"prompt":        prompt,
-				"requested_by":  requestedBy,
-				"options_count": optionsCount,
-			},
-		)
 
 		if jsonOutput {
 			printBeadJSON(bead)
@@ -256,17 +218,6 @@ var decisionRespondCmd = &cobra.Command{
 			return fmt.Errorf("closing decision %s: %w", id, err)
 		}
 
-		// Publish NATS event after successful close.
-		publishDecisionEvent(context.Background(),
-			fmt.Sprintf("decisions.%s.DecisionResponded", actor),
-			map[string]any{
-				"bead_id":       id,
-				"chosen":        selected,
-				"response_text": text,
-				"resolved_by":   actor,
-			},
-		)
-
 		if jsonOutput {
 			printBeadJSON(bead)
 		} else {
@@ -381,59 +332,59 @@ func decisionField(b *model.Bead, key string) string {
 }
 
 // waitForDecision blocks until the decision bead is closed or the context
-// is cancelled. Uses NATS if available, otherwise polls.
+// is cancelled. Uses HTTP SSE, falling back to polling.
 func waitForDecision(id string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
-
-	natsURL := os.Getenv("BEADS_NATS_URL")
-	if natsURL == "" {
-		natsURL = os.Getenv("COOP_NATS_URL")
-	}
-	if natsURL != "" {
-		return waitDecisionNATS(ctx, natsURL, id)
-	}
-	return waitDecisionPoll(ctx, id)
+	return waitDecisionSSE(ctx, id)
 }
 
-func waitDecisionNATS(ctx context.Context, natsURL, id string) error {
-	sub, err := events.NewNATSSubscriber(natsURL,
-		nats.ReconnectHandler(func(_ *nats.Conn) {}),
-	)
-	if err != nil {
-		// Fall back to polling on NATS failure.
-		return waitDecisionPoll(ctx, id)
-	}
-	defer sub.Close()
-
-	ch, cancel, err := sub.Subscribe("beads.>")
+// waitDecisionSSE subscribes to the SSE stream and waits for an event on the
+// given decision bead ID. Falls back to waitDecisionPoll on connection error.
+func waitDecisionSSE(ctx context.Context, id string) error {
+	sseURL := httpURL + "/v1/events/stream?topics=beads.%3E"
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, sseURL, nil)
 	if err != nil {
 		return waitDecisionPoll(ctx, id)
 	}
-	defer cancel()
+	req.Header.Set("Accept", "text/event-stream")
+	req.Header.Set("Cache-Control", "no-cache")
 
-	for {
-		select {
-		case <-ctx.Done():
-			return nil
-		case data, ok := <-ch:
-			if !ok {
-				return nil
-			}
-			// Check if this event is for our decision bead.
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return waitDecisionPoll(ctx, id)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return waitDecisionPoll(ctx, id)
+	}
+
+	scanner := bufio.NewScanner(resp.Body)
+	scanner.Buffer(make([]byte, 64*1024), 1024*1024)
+	var dataLine string
+	for scanner.Scan() {
+		line := scanner.Text()
+		switch {
+		case strings.HasPrefix(line, "data:"):
+			dataLine = strings.TrimPrefix(line, "data:")
+		case line == "" && dataLine != "":
 			var evt map[string]any
-			if err := json.Unmarshal(data, &evt); err != nil {
-				continue
+			if json.Unmarshal([]byte(dataLine), &evt) == nil {
+				if beadID, _ := evt["bead_id"].(string); beadID == id {
+					return printDecisionResult(id)
+				}
 			}
-			beadID, _ := evt["bead_id"].(string)
-			if beadID != id {
-				continue
-			}
-			return printDecisionResult(id)
-		case <-time.After(30 * time.Minute):
-			return fmt.Errorf("timeout waiting for decision %s", id)
+			dataLine = ""
 		}
 	}
+
+	if ctx.Err() != nil {
+		return nil
+	}
+
+	// Server closed the connection; fall back to poll.
+	return waitDecisionPoll(ctx, id)
 }
 
 func waitDecisionPoll(ctx context.Context, id string) error {

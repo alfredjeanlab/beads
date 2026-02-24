@@ -1,17 +1,18 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"time"
 
 	"github.com/groblegark/kbeads/internal/client"
-	"github.com/groblegark/kbeads/internal/events"
 	"github.com/groblegark/kbeads/internal/model"
-	"github.com/nats-io/nats.go"
 	"github.com/spf13/cobra"
 )
 
@@ -23,7 +24,8 @@ var yieldCmd = &cobra.Command{
   - A mail/message bead targeting this agent is created
   - The timeout expires (default 24h)
 
-Uses NATS if BEADS_NATS_URL is set, otherwise polls every 2 seconds.`,
+Uses HTTP SSE (GET /v1/events/stream) for real-time notification,
+with 2-second polling as fallback if SSE is unavailable.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		timeout, _ := cmd.Flags().GetDuration("timeout")
 
@@ -58,65 +60,82 @@ Uses NATS if BEADS_NATS_URL is set, otherwise polls every 2 seconds.`,
 			fmt.Fprintf(os.Stderr, "Yielding on decision %s: %s\n", d.ID, prompt)
 		}
 
-		natsURL := os.Getenv("BEADS_NATS_URL")
-		if natsURL == "" {
-			natsURL = os.Getenv("COOP_NATS_URL")
-		}
-
-		if natsURL != "" {
-			return yieldNATS(ctx, natsURL, resp.Beads)
-		}
-		return yieldPoll(ctx, resp.Beads)
+		return yieldSSE(ctx, resp.Beads)
 	},
 }
 
-func yieldNATS(ctx context.Context, natsURL string, pending []*model.Bead) error {
+// yieldSSE connects to the HTTP SSE endpoint and blocks until a relevant event
+// arrives or the context expires. Falls back to yieldPoll on connection error.
+func yieldSSE(ctx context.Context, pending []*model.Bead) error {
 	pendingIDs := make(map[string]bool, len(pending))
 	for _, b := range pending {
 		pendingIDs[b.ID] = true
 	}
 
-	sub, err := events.NewNATSSubscriber(natsURL,
-		nats.ReconnectHandler(func(_ *nats.Conn) {}),
-	)
+	sseURL := httpURL + "/v1/events/stream?topics=beads.%3E"
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, sseURL, nil)
 	if err != nil {
 		return yieldPoll(ctx, pending)
 	}
-	defer sub.Close()
+	req.Header.Set("Accept", "text/event-stream")
+	req.Header.Set("Cache-Control", "no-cache")
 
-	ch, cancel, err := sub.Subscribe("beads.>")
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return yieldPoll(ctx, pending)
 	}
-	defer cancel()
+	defer resp.Body.Close()
 
-	for {
-		select {
-		case <-ctx.Done():
-			if ctx.Err() == context.DeadlineExceeded {
-				fmt.Println("Yield timed out")
+	if resp.StatusCode != http.StatusOK {
+		return yieldPoll(ctx, pending)
+	}
+
+	scanner := bufio.NewScanner(resp.Body)
+	scanner.Buffer(make([]byte, 64*1024), 1024*1024)
+	var dataLine string
+	for scanner.Scan() {
+		line := scanner.Text()
+		switch {
+		case strings.HasPrefix(line, "data:"):
+			dataLine = strings.TrimPrefix(line, "data:")
+		case line == "" && dataLine != "":
+			if done, doneErr := processYieldEvent(dataLine, pendingIDs); done {
+				return doneErr
 			}
-			return nil
-		case data, ok := <-ch:
-			if !ok {
-				return nil
-			}
-			var evt map[string]any
-			if err := json.Unmarshal(data, &evt); err != nil {
-				continue
-			}
-			beadID, _ := evt["bead_id"].(string)
-			if pendingIDs[beadID] {
-				return printYieldResult(beadID)
-			}
-			// Also wake on mail/message creation targeting us.
-			beadType, _ := evt["type"].(string)
-			if beadType == "message" || beadType == "mail" {
-				fmt.Printf("Mail received: %s\n", beadID)
-				return nil
-			}
+			dataLine = ""
 		}
 	}
+
+	// Scanner ended — check why.
+	if ctx.Err() == context.DeadlineExceeded {
+		fmt.Println("Yield timed out")
+		return nil
+	}
+	if ctx.Err() != nil {
+		return nil
+	}
+
+	// Server closed the connection; fall back to poll.
+	return yieldPoll(ctx, pending)
+}
+
+// processYieldEvent parses a single SSE data line. Returns (true, err) if the
+// yield condition was satisfied, (false, nil) to continue waiting.
+func processYieldEvent(data string, pendingIDs map[string]bool) (bool, error) {
+	var evt map[string]any
+	if err := json.Unmarshal([]byte(data), &evt); err != nil {
+		return false, nil
+	}
+	beadID, _ := evt["bead_id"].(string)
+	if pendingIDs[beadID] {
+		return true, printYieldResult(beadID)
+	}
+	beadType, _ := evt["type"].(string)
+	if beadType == "message" || beadType == "mail" {
+		fmt.Printf("Mail received: %s\n", beadID)
+		return true, nil
+	}
+	return false, nil
 }
 
 func yieldPoll(ctx context.Context, pending []*model.Bead) error {
