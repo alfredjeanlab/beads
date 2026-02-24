@@ -98,7 +98,7 @@ var jackExtendCmd = &cobra.Command{
 		if reason != "" {
 			comment += ": " + reason
 		}
-		beadsClient.AddComment(context.Background(), id, actor, comment)
+		_, _ = beadsClient.AddComment(context.Background(), id, actor, comment)
 
 		if jsonOutput {
 			bead, _ = beadsClient.GetBead(context.Background(), id)

@@ -133,7 +133,7 @@ func injectInitialPrompt(ctx context.Context, coopPort int, role string) {
 			Delivered bool   `json:"delivered"`
 			Reason    string `json:"reason"`
 		}
-		json.NewDecoder(resp.Body).Decode(&result)
+		_ = json.NewDecoder(resp.Body).Decode(&result)
 		if result.Delivered {
 			fmt.Printf("[kd agent start] initial prompt delivered\n")
 		} else {
@@ -166,7 +166,7 @@ func monitorAgentExit(ctx context.Context, coopPort int) {
 		if agentState == "exited" {
 			fmt.Printf("[kd agent start] agent exited, requesting coop shutdown\n")
 			req, _ := http.NewRequestWithContext(ctx, http.MethodPost, base+"/shutdown", nil)
-			client.Do(req) //nolint:errcheck
+			_, _ = client.Do(req) //nolint:errcheck // best-effort shutdown; coop may already be gone
 			return
 		}
 	}

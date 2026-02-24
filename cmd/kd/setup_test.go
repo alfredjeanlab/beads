@@ -100,7 +100,7 @@ func TestHookContainsKD(t *testing.T) {
 func TestRunSetupClaudeRemove(t *testing.T) {
 	dir := t.TempDir()
 	claudeDir := filepath.Join(dir, ".claude")
-	os.MkdirAll(claudeDir, 0755)
+	_ = os.MkdirAll(claudeDir, 0755)
 
 	// Write settings with both kd hooks and other hooks.
 	settings := map[string]any{
@@ -239,7 +239,7 @@ func TestRunSetupClaudeCheck_Installed(t *testing.T) {
 func TestRunSetupClaudeCheck_NoKDHooks(t *testing.T) {
 	dir := t.TempDir()
 	claudeDir := filepath.Join(dir, ".claude")
-	os.MkdirAll(claudeDir, 0755)
+	_ = os.MkdirAll(claudeDir, 0755)
 
 	// Write settings without kd hooks.
 	settings := map[string]any{

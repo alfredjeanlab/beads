@@ -51,8 +51,8 @@ func setupWorkspace(cfg k8sConfig) error {
 		if err := runGitIn(cfg.workspace, "init", "-q"); err != nil {
 			fmt.Printf("[kd agent start] warning: git init: %v\n", err)
 		}
-		runGitIn(cfg.workspace, "config", "user.name", authorName)
-		runGitIn(cfg.workspace, "config", "user.email", cfg.role+"@gasboat.local")
+		_ = runGitIn(cfg.workspace, "config", "user.name", authorName)
+		_ = runGitIn(cfg.workspace, "config", "user.email", cfg.role+"@gasboat.local")
 	} else {
 		fmt.Printf("[kd agent start] git repo already exists in %s\n", cfg.workspace)
 		resetStaleBranch(cfg.workspace)
@@ -209,7 +209,7 @@ All tools are installed directly in the agent image — use them from the comman
 `
 		f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0o644)
 		if err == nil {
-			f.WriteString(devTools)
+			_, _ = f.WriteString(devTools)
 			f.Close()
 		}
 	}
@@ -249,7 +249,7 @@ func resetStaleBranch(workspace string) {
 		return
 	}
 	fmt.Printf("[kd agent start] WARNING: workspace on stale branch '%s', resetting to main\n", branch)
-	runGitIn(workspace, "checkout", "--", ".")
+	_ = runGitIn(workspace, "checkout", "--", ".")
 	runGitIn(workspace, "clean", "-fd")
 	if runGitIn(workspace, "checkout", "main") != nil {
 		runGitIn(workspace, "checkout", "-b", "main")

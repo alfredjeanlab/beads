@@ -199,7 +199,9 @@ func TestJackIntegration_FullLifecycle(t *testing.T) {
 	}
 
 	var finalFields map[string]any
-	json.Unmarshal(finalBead.Fields, &finalFields)
+	if err := json.Unmarshal(finalBead.Fields, &finalFields); err != nil {
+		t.Fatalf("unmarshal fields: %v", err)
+	}
 	if finalFields["jack_reverted"] != true {
 		t.Fatalf("expected jack_reverted=true, got %v", finalFields["jack_reverted"])
 	}
@@ -277,7 +279,9 @@ func TestJackIntegration_ExpiredJackDetection(t *testing.T) {
 		if b.ID == bead.ID {
 			found = true
 			var f map[string]any
-			json.Unmarshal(b.Fields, &f)
+			if err := json.Unmarshal(b.Fields, &f); err != nil {
+				t.Fatalf("unmarshal fields: %v", err)
+			}
 			expiresStr, _ := f["jack_expires_at"].(string)
 			expiresAt, err := time.Parse(time.RFC3339, expiresStr)
 			if err != nil {

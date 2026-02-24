@@ -33,7 +33,7 @@ var jackCheckCmd = &cobra.Command{
 		for _, bead := range resp.Beads {
 			var fields map[string]any
 			if len(bead.Fields) > 0 {
-				json.Unmarshal(bead.Fields, &fields)
+				_ = json.Unmarshal(bead.Fields, &fields)
 			}
 
 			expiresStr, _ := fields["jack_expires_at"].(string)
@@ -56,7 +56,7 @@ var jackCheckCmd = &cobra.Command{
 						fields["jack_escalated"] = true
 						fields["jack_escalated_at"] = now.Format(time.RFC3339)
 						fieldsJSON, _ := json.Marshal(fields)
-						beadsClient.UpdateBead(context.Background(), bead.ID, &client.UpdateBeadRequest{
+						_, _ = beadsClient.UpdateBead(context.Background(), bead.ID, &client.UpdateBeadRequest{
 							Fields: fieldsJSON,
 						})
 						fmt.Printf("  → Escalated (marked jack_escalated=true)\n")

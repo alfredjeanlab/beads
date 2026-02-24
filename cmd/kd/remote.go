@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -11,8 +10,6 @@ import (
 
 	"github.com/BurntSushi/toml"
 	"github.com/spf13/cobra"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/metadata"
 )
 
 // RemotesConfig holds all named remotes and tracks which one is active.
@@ -76,7 +73,6 @@ func saveRemotesConfig(cfg RemotesConfig) error {
 var (
 	remoteOnce      sync.Once
 	cachedRemoteURL string
-	cachedToken     string
 	cachedNATSURL   string
 )
 
@@ -91,23 +87,12 @@ func loadActiveRemoteOnce() {
 			return
 		}
 		cachedRemoteURL = r.URL
-		cachedToken = r.Token
 		cachedNATSURL = r.NATSURL
 	})
 }
 
-func activeRemoteURL() string   { loadActiveRemoteOnce(); return cachedRemoteURL }
-func activeRemoteToken() string  { loadActiveRemoteOnce(); return cachedToken }
+func activeRemoteURL() string    { loadActiveRemoteOnce(); return cachedRemoteURL }
 func activeRemoteNATSURL() string { loadActiveRemoteOnce(); return cachedNATSURL }
-
-// bearerTokenInterceptor returns a gRPC unary interceptor that attaches a
-// Bearer token to every outgoing call.
-func bearerTokenInterceptor(token string) grpc.UnaryClientInterceptor {
-	return func(ctx context.Context, method string, req, reply any, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
-		ctx = metadata.AppendToOutgoingContext(ctx, "authorization", "Bearer "+token)
-		return invoker(ctx, method, req, reply, cc, opts...)
-	}
-}
 
 var remoteCmd = &cobra.Command{
 	Use:     "remote",

@@ -433,7 +433,11 @@ func waitForHealth(ctx context.Context, url string, timeout time.Duration) error
 			return ctx.Err()
 		default:
 		}
-		resp, err := http.Get(url) //nolint:gosec,noctx
+		req, reqErr := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+		if reqErr != nil {
+			return reqErr
+		}
+		resp, err := http.DefaultClient.Do(req)
 		if err == nil {
 			resp.Body.Close()
 			if resp.StatusCode == http.StatusOK {
