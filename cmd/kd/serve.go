@@ -13,6 +13,7 @@ import (
 	"github.com/groblegark/kbeads/internal/config"
 	"github.com/groblegark/kbeads/internal/events"
 	"github.com/groblegark/kbeads/internal/hooks"
+	"github.com/groblegark/kbeads/internal/presence"
 	"github.com/groblegark/kbeads/internal/server"
 	"github.com/groblegark/kbeads/internal/store/postgres"
 	beadsync "github.com/groblegark/kbeads/internal/sync"
@@ -142,6 +143,13 @@ var serveCmd = &cobra.Command{
 			}
 		}
 
+		// Start presence tracker reaper for agent roster.
+		beadsServer.Presence.StartReaper(&presence.ReaperConfig{
+			DeadThreshold: 15 * time.Minute,
+			EvictAfter:    30 * time.Minute,
+			SweepInterval: 60 * time.Second,
+		})
+
 		// Log startup info.
 		logger.Info("beads server started",
 			"grpc_addr", cfg.GRPCAddr,
@@ -155,6 +163,9 @@ var serveCmd = &cobra.Command{
 		logger.Info("received signal, shutting down", "signal", sig)
 
 		// Graceful shutdown.
+		beadsServer.Presence.Stop()
+		logger.Info("presence tracker stopped")
+
 		if hooksCancel != nil {
 			hooksCancel()
 			logger.Info("hooks subscriber stopped")

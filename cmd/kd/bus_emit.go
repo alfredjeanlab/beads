@@ -72,6 +72,9 @@ Block reason is written to stderr as {"decision":"block","reason":"..."}.`,
 		// Extract claude_session_id from stdin JSON.
 		claudeSessionID, _ := stdinEvent["session_id"].(string)
 
+		// Extract tool_name for presence tracking (from PreToolUse/PostToolUse events).
+		toolName, _ := stdinEvent["tool_name"].(string)
+
 		// Resolve agent_bead_id in priority order:
 		//   1. KD_AGENT_ID env var
 		//   2. Query by KD_ACTOR name (assignee search)
@@ -87,6 +90,7 @@ Block reason is written to stderr as {"decision":"block","reason":"..."}.`,
 			ClaudeSessionID: claudeSessionID,
 			CWD:             cwd,
 			Actor:           actor,
+			ToolName:        toolName,
 		}
 
 		resp, err := beadsClient.EmitHook(cmd.Context(), req)

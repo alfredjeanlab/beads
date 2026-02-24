@@ -10,6 +10,7 @@ import (
 	"github.com/groblegark/kbeads/internal/events"
 	"github.com/groblegark/kbeads/internal/hooks"
 	"github.com/groblegark/kbeads/internal/model"
+	"github.com/groblegark/kbeads/internal/presence"
 	"github.com/groblegark/kbeads/internal/store"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -22,6 +23,7 @@ type BeadsServer struct {
 	publisher    events.Publisher
 	sseHub       *sseHub
 	hooksHandler *hooks.Handler
+	Presence     *presence.Tracker
 }
 
 // NewBeadsServer returns a new BeadsServer backed by the given store and publisher.
@@ -31,6 +33,7 @@ func NewBeadsServer(s store.Store, p events.Publisher) *BeadsServer {
 		publisher:    p,
 		sseHub:       newSSEHub(),
 		hooksHandler: hooks.NewHandler(s, slog.Default()),
+		Presence:     presence.New(),
 	}
 }
 

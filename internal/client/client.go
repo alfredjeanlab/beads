@@ -67,6 +67,7 @@ type EmitHookRequest struct {
 	ClaudeSessionID string `json:"claude_session_id,omitempty"`
 	CWD             string `json:"cwd,omitempty"`
 	Actor           string `json:"actor,omitempty"`
+	ToolName        string `json:"tool_name,omitempty"` // tool name from Claude Code (e.g. "Bash", "Read")
 }
 
 // EmitHookResponse is the response from EmitHook.
