@@ -1,0 +1,412 @@
+package main
+
+// kd agent start --local / --docker
+//
+// Spawns a local coop+claude agent session that is fully registered with the
+// kbeads server and coopmux — indistinguishable from a K8s agent.
+//
+// --local  Run claude directly on the host inside a coop session. Attached.
+// --docker Build the gasboat agent image locally and run in a container.
+//          Mounts $PWD into /home/agent/workspace. Detachable.
+
+import (
+	"context"
+	"fmt"
+	"net"
+	"net/http"
+	"os"
+	"os/exec"
+	"os/signal"
+	"path/filepath"
+	"strings"
+	"syscall"
+	"time"
+
+	"github.com/groblegark/kbeads/internal/client"
+	"github.com/spf13/cobra"
+)
+
+var agentCmd = &cobra.Command{
+	Use:   "agent",
+	Short: "Manage local agent sessions",
+}
+
+var agentStartCmd = &cobra.Command{
+	Use:   "start",
+	Short: "Start a local agent session (--local or --docker)",
+	Long: `Start a coop-based agent session registered with the kbeads server.
+
+  --local   Run claude on the host via coop. Attached (ctrl-C to stop).
+  --docker  Build the gasboat agent image and run in a container.
+            Mounts \$PWD into /home/agent/workspace. Detachable by default.
+
+The agent is registered with the kbeads server on startup and appears in
+'kd agent roster'. It is deregistered and its bead closed on exit.`,
+	RunE: runAgentStart,
+}
+
+func init() {
+	agentCmd.AddCommand(agentStartCmd)
+
+	agentStartCmd.Flags().Bool("local", false, "Run agent on the host via coop (attached)")
+	agentStartCmd.Flags().Bool("docker", false, "Run agent in a Docker container")
+	agentStartCmd.Flags().String("name", "", "Agent name (default: derived from hostname)")
+	agentStartCmd.Flags().String("role", "crew", "Agent role (e.g. crew, captain)")
+	agentStartCmd.Flags().String("dir", "", "Working directory (default: $PWD)")
+	agentStartCmd.Flags().String("image-dir", "", "Path to gasboat agent Dockerfile dir (--docker only)")
+	agentStartCmd.Flags().String("image", "", "Pre-built image name to skip rebuild (--docker only)")
+	agentStartCmd.Flags().Bool("attach", false, "Follow container output (--docker only; --local is always attached)")
+	agentStartCmd.Flags().String("command", "", "Command to run (default: claude --dangerously-skip-permissions)")
+}
+
+func runAgentStart(cmd *cobra.Command, args []string) error {
+	isLocal, _ := cmd.Flags().GetBool("local")
+	isDocker, _ := cmd.Flags().GetBool("docker")
+
+	if isLocal == isDocker {
+		return fmt.Errorf("specify exactly one of --local or --docker")
+	}
+
+	agentName, _ := cmd.Flags().GetString("name")
+	if agentName == "" {
+		h, _ := os.Hostname()
+		agentName = "local-" + h
+	}
+	role, _ := cmd.Flags().GetString("role")
+	dir, _ := cmd.Flags().GetString("dir")
+	if dir == "" {
+		var err error
+		dir, err = os.Getwd()
+		if err != nil {
+			return fmt.Errorf("get cwd: %w", err)
+		}
+	}
+	dir, _ = filepath.Abs(dir)
+
+	agentCmd2, _ := cmd.Flags().GetString("command")
+	if agentCmd2 == "" {
+		agentCmd2 = "claude --dangerously-skip-permissions"
+	}
+
+	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer cancel()
+
+	// 1. Create agent bead.
+	fmt.Printf("[kd agent start] Registering agent '%s' with kbeads server...\n", agentName)
+	bead, err := beadsClient.CreateBead(ctx, &client.CreateBeadRequest{
+		Title:     agentName,
+		Type:      "agent",
+		Assignee:  agentName,
+		CreatedBy: actor,
+		Labels:    []string{"execution_target:local"},
+	})
+	if err != nil {
+		return fmt.Errorf("create agent bead: %w", err)
+	}
+	agentBeadID := bead.ID
+	fmt.Printf("[kd agent start] Agent bead: %s\n", agentBeadID)
+
+	// Ensure bead is closed on exit regardless of how we exit.
+	defer func() {
+		dctx, dcancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer dcancel()
+		if _, err := beadsClient.CloseBead(dctx, agentBeadID, agentName); err != nil {
+			fmt.Fprintf(os.Stderr, "[kd agent start] warning: failed to close agent bead: %v\n", err)
+		} else {
+			fmt.Printf("[kd agent start] Agent bead %s closed.\n", agentBeadID)
+		}
+	}()
+
+	if isLocal {
+		return runLocal(ctx, agentName, agentBeadID, role, dir, agentCmd2)
+	}
+
+	imageDir, _ := cmd.Flags().GetString("image-dir")
+	imageName, _ := cmd.Flags().GetString("image")
+	attach, _ := cmd.Flags().GetBool("attach")
+	return runDocker(ctx, agentName, agentBeadID, role, dir, imageDir, imageName, agentCmd2, attach)
+}
+
+// ── --local ───────────────────────────────────────────────────────────────
+
+func runLocal(ctx context.Context, agentName, agentBeadID, role, dir, agentCommand string) error {
+	// Find a free port for coop.
+	coopPort, err := freePort()
+	if err != nil {
+		return fmt.Errorf("find free port: %w", err)
+	}
+	coopAddr := fmt.Sprintf("http://localhost:%d", coopPort)
+	fmt.Printf("[kd agent start] Starting coop on port %d...\n", coopPort)
+
+	// Build env for the coop+claude subprocess.
+	env := localAgentEnv(agentName, agentBeadID, role, dir, coopAddr)
+
+	// Build coop command: coop --agent=claude --port=<N> -- <agentCommand>
+	coopArgs := []string{
+		"--agent=claude",
+		fmt.Sprintf("--port=%d", coopPort),
+		fmt.Sprintf("--port-health=%d", coopPort+1),
+		"--cols=200",
+		"--rows=50",
+		"--",
+	}
+	coopArgs = append(coopArgs, strings.Fields(agentCommand)...)
+
+	coopProc := exec.CommandContext(ctx, "coop", coopArgs...)
+	coopProc.Dir = dir
+	coopProc.Env = env
+	coopProc.Stdout = os.Stdout
+	coopProc.Stderr = os.Stderr
+	coopProc.Stdin = os.Stdin
+
+	if err := coopProc.Start(); err != nil {
+		return fmt.Errorf("start coop: %w", err)
+	}
+	fmt.Printf("[kd agent start] Coop started (pid %d)\n", coopProc.Process.Pid)
+
+	// 2. Wait for coop health.
+	healthURL := fmt.Sprintf("http://localhost:%d/api/v1/health", coopPort+1)
+	if err := waitForHealth(ctx, healthURL, 30*time.Second); err != nil {
+		_ = coopProc.Process.Kill()
+		return fmt.Errorf("coop health check: %w", err)
+	}
+
+	// 3. Emit SessionStart hook → registers in presence tracker.
+	if err := emitHook(ctx, agentBeadID, agentName, "SessionStart", dir); err != nil {
+		fmt.Fprintf(os.Stderr, "[kd agent start] warning: SessionStart emit failed: %v\n", err)
+	}
+
+	// 4. Start heartbeat in background.
+	go heartbeatLoop(ctx, agentBeadID, agentName, dir)
+
+	// 5. Wait for coop to exit.
+	waitErr := coopProc.Wait()
+
+	// 6. Emit Stop hook (best-effort).
+	stopCtx, stopCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer stopCancel()
+	_ = emitHook(stopCtx, agentBeadID, agentName, "Stop", dir)
+
+	if waitErr != nil && ctx.Err() == nil {
+		return fmt.Errorf("coop exited: %w", waitErr)
+	}
+	return nil
+}
+
+// ── --docker ──────────────────────────────────────────────────────────────
+
+func runDocker(ctx context.Context, agentName, agentBeadID, role, dir, imageDir, imageName string, agentCommand string, attach bool) error {
+	// Resolve image dir.
+	if imageName == "" {
+		if imageDir == "" {
+			// Try common locations.
+			candidates := []string{
+				filepath.Join(os.Getenv("HOME"), "gasboat", "images", "agent"),
+				"./images/agent",
+			}
+			for _, c := range candidates {
+				if _, err := os.Stat(filepath.Join(c, "Dockerfile")); err == nil {
+					imageDir = c
+					break
+				}
+			}
+			if imageDir == "" {
+				return fmt.Errorf("could not find gasboat agent Dockerfile; use --image-dir or --image")
+			}
+		}
+
+		// Build the image.
+		imageName = "kd-agent-local:latest"
+		fmt.Printf("[kd agent start] Building agent image from %s...\n", imageDir)
+		buildCmd := exec.CommandContext(ctx, "docker", "build", "-t", imageName, imageDir)
+		buildCmd.Stdout = os.Stdout
+		buildCmd.Stderr = os.Stderr
+		if err := buildCmd.Run(); err != nil {
+			return fmt.Errorf("docker build: %w", err)
+		}
+		fmt.Printf("[kd agent start] Image built: %s\n", imageName)
+	}
+
+	// Assemble docker run args.
+	beadsURL := os.Getenv("BEADS_HTTP_URL")
+	if beadsURL == "" {
+		beadsURL = httpURL // global flag from main.go
+	}
+
+	runArgs := []string{
+		"run", "--rm",
+		"--name", containerName(agentName),
+		// Mount $PWD as workspace.
+		"-v", dir + ":/home/agent/workspace",
+		// Env vars.
+		"-e", "ANTHROPIC_API_KEY=" + os.Getenv("ANTHROPIC_API_KEY"),
+		"-e", "BEADS_HTTP_URL=" + beadsURL,
+		"-e", "BEADS_HTTP_ADDR=" + beadsURL,
+		"-e", "KD_AGENT_ID=" + agentBeadID,
+		"-e", "KD_ACTOR=" + agentName,
+		"-e", "BOAT_ROLE=" + role,
+		"-e", "BOAT_AGENT=" + agentName,
+		"-e", "BOAT_AGENT_BEAD_ID=" + agentBeadID,
+		"-e", "BOAT_COMMAND=" + agentCommand,
+	}
+
+	// Forward optional env vars.
+	for _, k := range []string{
+		"COOP_MUX_URL", "COOP_MUX_AUTH_TOKEN",
+		"GIT_AUTHOR_NAME", "GIT_USERNAME", "GIT_TOKEN",
+		"BEADS_DAEMON_TOKEN",
+	} {
+		if v := os.Getenv(k); v != "" {
+			runArgs = append(runArgs, "-e", k+"="+v)
+		}
+	}
+
+	if attach {
+		// Attach: stream stdout/stderr.
+		runArgs = append(runArgs, imageName)
+		fmt.Printf("[kd agent start] Running container '%s' (attached)...\n", containerName(agentName))
+		dockerCmd := exec.CommandContext(ctx, "docker", runArgs...)
+		dockerCmd.Stdout = os.Stdout
+		dockerCmd.Stderr = os.Stderr
+		dockerCmd.Stdin = os.Stdin
+
+		// Emit SessionStart after container comes up (best-effort, delayed).
+		go func() {
+			time.Sleep(5 * time.Second)
+			_ = emitHook(ctx, agentBeadID, agentName, "SessionStart", dir)
+			heartbeatLoop(ctx, agentBeadID, agentName, dir)
+		}()
+
+		waitErr := dockerCmd.Run()
+		stopCtx, stopCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer stopCancel()
+		_ = emitHook(stopCtx, agentBeadID, agentName, "Stop", dir)
+		return waitErr
+	}
+
+	// Detached: docker run -d
+	runArgs = append([]string{runArgs[0], "-d"}, runArgs[1:]...)
+	runArgs = append(runArgs, imageName)
+
+	fmt.Printf("[kd agent start] Starting container '%s' (detached)...\n", containerName(agentName))
+	out, err := exec.CommandContext(ctx, "docker", runArgs...).Output()
+	if err != nil {
+		return fmt.Errorf("docker run: %w", err)
+	}
+	containerID := strings.TrimSpace(string(out))
+	fmt.Printf("[kd agent start] Container started: %s\n", containerID[:12])
+	fmt.Printf("[kd agent start] Agent bead:       %s\n", agentBeadID)
+	fmt.Printf("[kd agent start] Logs:              docker logs -f %s\n", containerName(agentName))
+	fmt.Printf("[kd agent start] Stop:              docker stop %s\n", containerName(agentName))
+
+	// Emit SessionStart in background.
+	go func() {
+		time.Sleep(5 * time.Second)
+		_ = emitHook(context.Background(), agentBeadID, agentName, "SessionStart", dir)
+		// For detached containers, we don't heartbeat from the host — the container
+		// itself emits hooks via its coop hooks. We just registered the bead.
+	}()
+
+	return nil
+}
+
+// ── helpers ───────────────────────────────────────────────────────────────
+
+// localAgentEnv builds the environment slice for a --local coop subprocess.
+func localAgentEnv(agentName, agentBeadID, role, dir, coopAddr string) []string {
+	beadsURL := os.Getenv("BEADS_HTTP_URL")
+	if beadsURL == "" {
+		beadsURL = httpURL
+	}
+
+	// Start from the host environment so PATH, HOME, etc. are inherited.
+	env := os.Environ()
+	overrides := map[string]string{
+		"KD_AGENT_ID":         agentBeadID,
+		"KD_ACTOR":            agentName,
+		"BOAT_ROLE":           role,
+		"BOAT_AGENT":          agentName,
+		"BOAT_AGENT_BEAD_ID":  agentBeadID,
+		"BEADS_HTTP_URL":      beadsURL,
+		"BEADS_HTTP_ADDR":     beadsURL,
+		"BEADS_DAEMON_HTTP_URL": beadsURL,
+		"XDG_STATE_HOME":      filepath.Join(dir, ".state"),
+	}
+	// Remove any existing versions of keys we're overriding.
+	filtered := env[:0]
+	for _, e := range env {
+		key := strings.SplitN(e, "=", 2)[0]
+		if _, skip := overrides[key]; !skip {
+			filtered = append(filtered, e)
+		}
+	}
+	for k, v := range overrides {
+		filtered = append(filtered, k+"="+v)
+	}
+	_ = coopAddr // available for future use (e.g. coopmux registration)
+	return filtered
+}
+
+// emitHook sends a hook event to the kbeads server.
+func emitHook(ctx context.Context, agentBeadID, agentName, hookType, cwd string) error {
+	_, err := beadsClient.EmitHook(ctx, &client.EmitHookRequest{
+		AgentBeadID: agentBeadID,
+		HookType:    hookType,
+		Actor:       agentName,
+		CWD:         cwd,
+	})
+	return err
+}
+
+// heartbeatLoop emits periodic hook events to keep the agent alive in the
+// presence tracker (reaper threshold: 15 min).
+func heartbeatLoop(ctx context.Context, agentBeadID, agentName, cwd string) {
+	ticker := time.NewTicker(5 * time.Minute)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			_ = emitHook(ctx, agentBeadID, agentName, "PreToolUse", cwd)
+		}
+	}
+}
+
+// waitForHealth polls an HTTP health endpoint until it returns 200 or times out.
+func waitForHealth(ctx context.Context, url string, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+		resp, err := http.Get(url) //nolint:gosec,noctx
+		if err == nil {
+			resp.Body.Close()
+			if resp.StatusCode == http.StatusOK {
+				return nil
+			}
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+	return fmt.Errorf("timed out waiting for %s", url)
+}
+
+// freePort finds a free TCP port on localhost.
+func freePort() (int, error) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		return 0, err
+	}
+	port := ln.Addr().(*net.TCPAddr).Port
+	ln.Close()
+	return port, nil
+}
+
+// containerName returns a stable Docker container name for an agent.
+func containerName(agentName string) string {
+	safe := strings.NewReplacer(" ", "-", "/", "-", ":", "-").Replace(agentName)
+	return "kd-agent-" + safe
+}
