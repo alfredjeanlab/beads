@@ -356,19 +356,34 @@ func localAgentEnv(agentName, agentBeadID, role, dir, coopAddr string) []string 
 		beadsURL = httpURL
 	}
 
+	// Derive NATS WebSocket URL from beadsURL for the NATS relay.
+	natsWsURL := strings.Replace(beadsURL, "https://", "wss://", 1)
+	natsWsURL = strings.Replace(natsWsURL, "http://", "ws://", 1)
+	natsWsURL += "/nats"
+
 	// Start from the host environment so PATH, HOME, etc. are inherited.
 	env := os.Environ()
 	overrides := map[string]string{
-		"KD_AGENT_ID":         agentBeadID,
-		"KD_ACTOR":            agentName,
-		"BOAT_ROLE":           role,
-		"BOAT_AGENT":          agentName,
-		"BOAT_AGENT_BEAD_ID":  agentBeadID,
-		"BEADS_HTTP_URL":      beadsURL,
-		"BEADS_HTTP_ADDR":     beadsURL,
+		"KD_AGENT_ID":          agentBeadID,
+		"KD_ACTOR":             agentName,
+		"BOAT_ROLE":            role,
+		"BOAT_AGENT":           agentName,
+		"BOAT_AGENT_BEAD_ID":   agentBeadID,
+		"BEADS_HTTP_URL":       beadsURL,
+		"BEADS_HTTP_ADDR":      beadsURL,
 		"BEADS_DAEMON_HTTP_URL": beadsURL,
-		"XDG_STATE_HOME":      filepath.Join(dir, ".state"),
+		"XDG_STATE_HOME":       filepath.Join(dir, ".state"),
+		// NATS relay: enables coop to publish session-scoped events via NATS
+		// so coopmux can discover and monitor local agent sessions.
+		"COOP_NATS_URL":    natsWsURL,
+		"COOP_NATS_PREFIX": "coop.mux",
+		"COOP_NATS_RELAY":  "1",
+		"COOP_URL":         coopAddr,
 	}
+	if tok := os.Getenv("BEADS_DAEMON_TOKEN"); tok != "" {
+		overrides["COOP_NATS_TOKEN"] = tok
+	}
+
 	// Remove any existing versions of keys we're overriding.
 	filtered := env[:0]
 	for _, e := range env {
@@ -380,7 +395,6 @@ func localAgentEnv(agentName, agentBeadID, role, dir, coopAddr string) []string 
 	for k, v := range overrides {
 		filtered = append(filtered, k+"="+v)
 	}
-	_ = coopAddr // available for future use (e.g. coopmux registration)
 	return filtered
 }
 
