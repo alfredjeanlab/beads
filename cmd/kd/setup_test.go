@@ -130,7 +130,7 @@ func TestRunSetupClaudeRemove(t *testing.T) {
 		},
 	}
 	data, _ := json.MarshalIndent(settings, "", "  ")
-	os.WriteFile(filepath.Join(claudeDir, "settings.json"), data, 0600)
+	_ = os.WriteFile(filepath.Join(claudeDir, "settings.json"), data, 0600)
 
 	if err := runSetupClaudeRemove(dir); err != nil {
 		t.Fatalf("runSetupClaudeRemove: %v", err)
@@ -255,7 +255,7 @@ func TestRunSetupClaudeCheck_NoKDHooks(t *testing.T) {
 		},
 	}
 	data, _ := json.MarshalIndent(settings, "", "  ")
-	os.WriteFile(filepath.Join(claudeDir, "settings.json"), data, 0600)
+	_ = os.WriteFile(filepath.Join(claudeDir, "settings.json"), data, 0600)
 
 	// Verify hooks check fails.
 	var result map[string]any

@@ -166,12 +166,6 @@ func init() {
 	_ = busEmitCmd.MarkFlagRequired("hook")
 }
 
-// printSystemReminder writes text as a Claude Code system-reminder tag to stdout.
-// Exported so other commands can reuse it if needed.
-func printSystemReminder(text string) {
-	fmt.Printf("<system-reminder>%s</system-reminder>\n", strings.TrimSpace(text))
-}
-
 // resolvePrimeAgentFromEnv resolves agent identity from env vars and the global actor.
 // Used by bus emit when --for flag is not available.
 func resolvePrimeAgentFromEnv(globalActor string) string {
