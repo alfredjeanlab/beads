@@ -298,7 +298,22 @@ func (s *BeadsServer) updateBead(ctx context.Context, id string, in updateBeadIn
 	}
 
 	if in.Fields != nil {
-		bead.Fields = in.Fields
+		// Merge incoming fields into existing fields (patch semantics).
+		existing := make(map[string]any)
+		if len(bead.Fields) > 0 {
+			_ = json.Unmarshal(bead.Fields, &existing)
+		}
+		var patch map[string]any
+		if err := json.Unmarshal(in.Fields, &patch); err == nil {
+			for k, v := range patch {
+				existing[k] = v
+			}
+		}
+		merged, mergeErr := json.Marshal(existing)
+		if mergeErr != nil {
+			return nil, fmt.Errorf("failed to merge fields: %w", mergeErr)
+		}
+		bead.Fields = merged
 		changes["fields"] = bead.Fields
 	}
 	if in.labelsSet {
