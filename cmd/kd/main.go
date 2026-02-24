@@ -131,6 +131,8 @@ func init() {
 	rootCmd.AddCommand(inboxCmd)
 	rootCmd.AddCommand(decisionCmd)
 	rootCmd.AddCommand(yieldCmd)
+	rootCmd.AddCommand(busCmd)
+	rootCmd.AddCommand(gateCmd)
 
 	// System
 	rootCmd.AddCommand(serveCmd)
