@@ -482,3 +482,147 @@ func TestHTTPClient_ConcurrentRequests(t *testing.T) {
 		}
 	}
 }
+
+// --- GetAgentRoster ---
+
+func TestHTTPClient_GetAgentRoster(t *testing.T) {
+	h := &testHandler{
+		responseBody: `{
+			"actors": [
+				{
+					"actor": "wise-newt",
+					"task_id": "bd-abc12",
+					"task_title": "Fix login bug",
+					"idle_secs": 30.5,
+					"last_event": "Bash",
+					"session_id": "sess-1"
+				},
+				{
+					"actor": "ripe-elk",
+					"idle_secs": 120.0,
+					"reaped": true
+				}
+			],
+			"unclaimed_tasks": [
+				{"id": "bd-xyz99", "title": "Write docs", "priority": 2}
+			]
+		}`,
+	}
+	c, srv := newTestClient(h)
+	defer srv.Close()
+
+	resp, err := c.GetAgentRoster(context.Background(), 600)
+	if err != nil {
+		t.Fatalf("GetAgentRoster() error = %v", err)
+	}
+
+	// Verify request.
+	if h.method != http.MethodGet {
+		t.Errorf("method = %q, want GET", h.method)
+	}
+	if h.path != "/v1/agents/roster" {
+		t.Errorf("path = %q, want /v1/agents/roster", h.path)
+	}
+	if h.query != "stale_threshold_secs=600" {
+		t.Errorf("query = %q, want stale_threshold_secs=600", h.query)
+	}
+
+	// Verify parsed response.
+	if len(resp.Actors) != 2 {
+		t.Fatalf("len(Actors) = %d, want 2", len(resp.Actors))
+	}
+	a0 := resp.Actors[0]
+	if a0.Actor != "wise-newt" {
+		t.Errorf("Actors[0].Actor = %q, want wise-newt", a0.Actor)
+	}
+	if a0.TaskID != "bd-abc12" {
+		t.Errorf("Actors[0].TaskID = %q, want bd-abc12", a0.TaskID)
+	}
+	if a0.TaskTitle != "Fix login bug" {
+		t.Errorf("Actors[0].TaskTitle = %q, want Fix login bug", a0.TaskTitle)
+	}
+	if a0.IdleSecs != 30.5 {
+		t.Errorf("Actors[0].IdleSecs = %f, want 30.5", a0.IdleSecs)
+	}
+	if a0.LastEvent != "Bash" {
+		t.Errorf("Actors[0].LastEvent = %q, want Bash", a0.LastEvent)
+	}
+	if a0.SessionID != "sess-1" {
+		t.Errorf("Actors[0].SessionID = %q, want sess-1", a0.SessionID)
+	}
+
+	a1 := resp.Actors[1]
+	if a1.Actor != "ripe-elk" {
+		t.Errorf("Actors[1].Actor = %q, want ripe-elk", a1.Actor)
+	}
+	if !a1.Reaped {
+		t.Error("Actors[1].Reaped = false, want true")
+	}
+	if a1.TaskID != "" {
+		t.Errorf("Actors[1].TaskID = %q, want empty", a1.TaskID)
+	}
+
+	if len(resp.UnclaimedTasks) != 1 {
+		t.Fatalf("len(UnclaimedTasks) = %d, want 1", len(resp.UnclaimedTasks))
+	}
+	ut := resp.UnclaimedTasks[0]
+	if ut.ID != "bd-xyz99" || ut.Title != "Write docs" || ut.Priority != 2 {
+		t.Errorf("UnclaimedTasks[0] = %+v, want {bd-xyz99, Write docs, 2}", ut)
+	}
+}
+
+func TestHTTPClient_GetAgentRoster_Empty(t *testing.T) {
+	h := &testHandler{
+		responseBody: `{"actors": [], "unclaimed_tasks": []}`,
+	}
+	c, srv := newTestClient(h)
+	defer srv.Close()
+
+	resp, err := c.GetAgentRoster(context.Background(), 300)
+	if err != nil {
+		t.Fatalf("GetAgentRoster() error = %v", err)
+	}
+	if len(resp.Actors) != 0 {
+		t.Errorf("len(Actors) = %d, want 0", len(resp.Actors))
+	}
+	if len(resp.UnclaimedTasks) != 0 {
+		t.Errorf("len(UnclaimedTasks) = %d, want 0", len(resp.UnclaimedTasks))
+	}
+}
+
+func TestHTTPClient_GetAgentRoster_ServerError(t *testing.T) {
+	h := &testHandler{
+		statusCode:   http.StatusInternalServerError,
+		responseBody: `{"error": "database unavailable"}`,
+	}
+	c, srv := newTestClient(h)
+	defer srv.Close()
+
+	_, err := c.GetAgentRoster(context.Background(), 600)
+	if err == nil {
+		t.Fatal("GetAgentRoster() expected error for 500 response")
+	}
+	var apiErr *APIError
+	if !errors.As(err, &apiErr) {
+		t.Fatalf("expected APIError, got %T: %v", err, err)
+	}
+	if apiErr.StatusCode != 500 {
+		t.Errorf("APIError.StatusCode = %d, want 500", apiErr.StatusCode)
+	}
+}
+
+func TestHTTPClient_GetAgentRoster_DefaultThreshold(t *testing.T) {
+	h := &testHandler{
+		responseBody: `{"actors": [], "unclaimed_tasks": []}`,
+	}
+	c, srv := newTestClient(h)
+	defer srv.Close()
+
+	_, err := c.GetAgentRoster(context.Background(), 0)
+	if err != nil {
+		t.Fatalf("GetAgentRoster() error = %v", err)
+	}
+	if h.query != "stale_threshold_secs=0" {
+		t.Errorf("query = %q, want stale_threshold_secs=0", h.query)
+	}
+}
