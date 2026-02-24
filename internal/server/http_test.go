@@ -14,6 +14,7 @@ import (
 
 	"github.com/groblegark/kbeads/internal/events"
 	"github.com/groblegark/kbeads/internal/model"
+	"github.com/groblegark/kbeads/internal/presence"
 	"github.com/groblegark/kbeads/internal/store"
 )
 
@@ -1366,4 +1367,175 @@ func TestHandleCreateBead_DueAtOnNonIssue(t *testing.T) {
 		"title": "x", "type": "note", "due_at": "2026-03-01T00:00:00Z",
 	})
 	requireStatus(t, rec, 201)
+}
+
+// --- Agent Roster ---
+
+func TestHandleAgentRoster_WithPresenceAndTasks(t *testing.T) {
+	srv, ms, h := newTestServer()
+
+	// Seed presence data.
+	srv.Presence.RecordHookEvent(presence.HookEvent{
+		Actor:     "wise-newt",
+		HookType:  "PostToolUse",
+		ToolName:  "Bash",
+		SessionID: "sess-1",
+		CWD:       "/home/agent/beads",
+	})
+	srv.Presence.RecordHookEvent(presence.HookEvent{
+		Actor:     "ripe-elk",
+		HookType:  "SessionStart",
+		SessionID: "sess-2",
+	})
+
+	// Seed an in_progress bead assigned to wise-newt.
+	ms.beads["bd-task1"] = &model.Bead{
+		ID:       "bd-task1",
+		Title:    "Fix login bug",
+		Status:   model.StatusInProgress,
+		Assignee: "wise-newt",
+	}
+
+	// Seed an unclaimed in_progress bead (no assignee).
+	ms.beads["bd-orphan"] = &model.Bead{
+		ID:       "bd-orphan",
+		Title:    "Orphan task",
+		Status:   model.StatusInProgress,
+		Priority: 1,
+	}
+
+	rec := doJSON(t, h, "GET", "/v1/agents/roster?stale_threshold_secs=600", nil)
+	requireStatus(t, rec, 200)
+
+	var resp struct {
+		Actors []struct {
+			Actor     string  `json:"actor"`
+			TaskID    string  `json:"task_id"`
+			TaskTitle string  `json:"task_title"`
+			IdleSecs  float64 `json:"idle_secs"`
+			LastEvent string  `json:"last_event"`
+			ToolName  string  `json:"tool_name"`
+			SessionID string  `json:"session_id"`
+			CWD       string  `json:"cwd"`
+		} `json:"actors"`
+		UnclaimedTasks []struct {
+			ID       string `json:"id"`
+			Title    string `json:"title"`
+			Priority int    `json:"priority"`
+		} `json:"unclaimed_tasks"`
+	}
+	decodeJSON(t, rec, &resp)
+
+	if len(resp.Actors) != 2 {
+		t.Fatalf("len(actors) = %d, want 2", len(resp.Actors))
+	}
+
+	// Find wise-newt in the roster (order depends on LastSeen, both should be present).
+	var found bool
+	for _, a := range resp.Actors {
+		if a.Actor == "wise-newt" {
+			found = true
+			if a.TaskID != "bd-task1" {
+				t.Errorf("wise-newt.task_id = %q, want bd-task1", a.TaskID)
+			}
+			if a.TaskTitle != "Fix login bug" {
+				t.Errorf("wise-newt.task_title = %q, want Fix login bug", a.TaskTitle)
+			}
+			if a.LastEvent != "PostToolUse" {
+				t.Errorf("wise-newt.last_event = %q, want PostToolUse", a.LastEvent)
+			}
+			if a.ToolName != "Bash" {
+				t.Errorf("wise-newt.tool_name = %q, want Bash", a.ToolName)
+			}
+			if a.SessionID != "sess-1" {
+				t.Errorf("wise-newt.session_id = %q, want sess-1", a.SessionID)
+			}
+			if a.CWD != "/home/agent/beads" {
+				t.Errorf("wise-newt.cwd = %q, want /home/agent/beads", a.CWD)
+			}
+		}
+	}
+	if !found {
+		t.Error("wise-newt not found in roster")
+	}
+
+	// Verify unclaimed tasks.
+	if len(resp.UnclaimedTasks) != 1 {
+		t.Fatalf("len(unclaimed_tasks) = %d, want 1", len(resp.UnclaimedTasks))
+	}
+	if resp.UnclaimedTasks[0].ID != "bd-orphan" {
+		t.Errorf("unclaimed[0].id = %q, want bd-orphan", resp.UnclaimedTasks[0].ID)
+	}
+	if resp.UnclaimedTasks[0].Priority != 1 {
+		t.Errorf("unclaimed[0].priority = %d, want 1", resp.UnclaimedTasks[0].Priority)
+	}
+}
+
+func TestHandleAgentRoster_NilPresence(t *testing.T) {
+	// When Presence is nil, should return empty arrays (not error).
+	ms := newMockStore()
+	s := NewBeadsServer(ms, &events.NoopPublisher{})
+	s.Presence = nil
+	h := s.NewHTTPHandler()
+
+	rec := doJSON(t, h, "GET", "/v1/agents/roster", nil)
+	requireStatus(t, rec, 200)
+
+	var resp struct {
+		Actors         []any `json:"actors"`
+		UnclaimedTasks []any `json:"unclaimed_tasks"`
+	}
+	decodeJSON(t, rec, &resp)
+
+	if len(resp.Actors) != 0 {
+		t.Errorf("actors should be empty, got %d", len(resp.Actors))
+	}
+	if len(resp.UnclaimedTasks) != 0 {
+		t.Errorf("unclaimed_tasks should be empty, got %d", len(resp.UnclaimedTasks))
+	}
+}
+
+func TestHandleAgentRoster_EmptyPresence(t *testing.T) {
+	_, _, h := newTestServer()
+
+	rec := doJSON(t, h, "GET", "/v1/agents/roster", nil)
+	requireStatus(t, rec, 200)
+
+	var resp struct {
+		Actors         []any `json:"actors"`
+		UnclaimedTasks []any `json:"unclaimed_tasks"`
+	}
+	decodeJSON(t, rec, &resp)
+
+	if len(resp.Actors) != 0 {
+		t.Errorf("actors should be empty, got %d", len(resp.Actors))
+	}
+}
+
+func TestHandleAgentRoster_NoAssignedTask(t *testing.T) {
+	srv, _, h := newTestServer()
+
+	// Agent in presence but no matching in_progress bead.
+	srv.Presence.RecordHookEvent(presence.HookEvent{
+		Actor:    "idle-agent",
+		HookType: "SessionStart",
+	})
+
+	rec := doJSON(t, h, "GET", "/v1/agents/roster?stale_threshold_secs=600", nil)
+	requireStatus(t, rec, 200)
+
+	var resp struct {
+		Actors []struct {
+			Actor  string `json:"actor"`
+			TaskID string `json:"task_id"`
+		} `json:"actors"`
+	}
+	decodeJSON(t, rec, &resp)
+
+	if len(resp.Actors) != 1 {
+		t.Fatalf("len(actors) = %d, want 1", len(resp.Actors))
+	}
+	if resp.Actors[0].TaskID != "" {
+		t.Errorf("task_id should be empty for agent with no task, got %q", resp.Actors[0].TaskID)
+	}
 }
