@@ -134,6 +134,7 @@ func init() {
 	rootCmd.AddCommand(busCmd)
 	rootCmd.AddCommand(gateCmd)
 	rootCmd.AddCommand(setupCmd)
+	rootCmd.AddCommand(newsCmd)
 
 	// System
 	rootCmd.AddCommand(serveCmd)
