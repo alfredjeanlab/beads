@@ -1197,6 +1197,167 @@ func TestHandleGetBlocked_WithData(t *testing.T) {
 	}
 }
 
+func TestHandleGetDecision(t *testing.T) {
+	_, ms, h := newTestServer()
+
+	// Add a decision bead with fields.
+	fields, _ := json.Marshal(map[string]any{
+		"prompt":       "Deploy to prod?",
+		"options":      json.RawMessage(`[{"id":"y","label":"Yes"},{"id":"n","label":"No"}]`),
+		"context":      "Release v1.0 is ready",
+		"requested_by": "alice",
+	})
+	ms.beads["kd-d1"] = &model.Bead{
+		ID:     "kd-d1",
+		Kind:   model.KindData,
+		Type:   model.TypeDecision,
+		Title:  "Deploy to prod?",
+		Status: model.StatusOpen,
+		Fields: fields,
+	}
+
+	rec := doJSON(t, h, "GET", "/v1/decisions/kd-d1", nil)
+	requireStatus(t, rec, 200)
+
+	var result struct {
+		Decision map[string]any `json:"decision"`
+		Issue    *model.Bead    `json:"issue"`
+	}
+	decodeJSON(t, rec, &result)
+
+	if result.Decision["prompt"] != "Deploy to prod?" {
+		t.Fatalf("expected prompt 'Deploy to prod?', got %v", result.Decision["prompt"])
+	}
+	if result.Decision["requested_by"] != "alice" {
+		t.Fatalf("expected requested_by 'alice', got %v", result.Decision["requested_by"])
+	}
+	if result.Issue.ID != "kd-d1" {
+		t.Fatalf("expected issue id kd-d1, got %s", result.Issue.ID)
+	}
+}
+
+func TestHandleGetDecision_NotFound(t *testing.T) {
+	_, _, h := newTestServer()
+
+	rec := doJSON(t, h, "GET", "/v1/decisions/kd-nope", nil)
+	requireStatus(t, rec, 404)
+}
+
+func TestHandleListDecisions(t *testing.T) {
+	_, ms, h := newTestServer()
+
+	fields1, _ := json.Marshal(map[string]any{"prompt": "Q1"})
+	fields2, _ := json.Marshal(map[string]any{"prompt": "Q2"})
+	ms.beads["kd-d1"] = &model.Bead{
+		ID: "kd-d1", Kind: model.KindData, Type: model.TypeDecision,
+		Title: "Q1", Status: model.StatusOpen, Fields: fields1,
+	}
+	ms.beads["kd-d2"] = &model.Bead{
+		ID: "kd-d2", Kind: model.KindData, Type: model.TypeDecision,
+		Title: "Q2", Status: model.StatusOpen, Fields: fields2,
+	}
+	// Non-decision bead — should not appear.
+	ms.beads["kd-t1"] = &model.Bead{
+		ID: "kd-t1", Kind: model.KindIssue, Type: model.TypeTask,
+		Title: "Task", Status: model.StatusOpen,
+	}
+
+	rec := doJSON(t, h, "GET", "/v1/decisions", nil)
+	requireStatus(t, rec, 200)
+
+	var result struct {
+		Decisions []map[string]any `json:"decisions"`
+	}
+	decodeJSON(t, rec, &result)
+	if len(result.Decisions) != 2 {
+		t.Fatalf("expected 2 decisions, got %d", len(result.Decisions))
+	}
+}
+
+func TestHandleListDecisions_Empty(t *testing.T) {
+	_, _, h := newTestServer()
+
+	rec := doJSON(t, h, "GET", "/v1/decisions", nil)
+	requireStatus(t, rec, 200)
+
+	var result struct {
+		Decisions []map[string]any `json:"decisions"`
+	}
+	decodeJSON(t, rec, &result)
+	if len(result.Decisions) != 0 {
+		t.Fatalf("expected 0 decisions, got %d", len(result.Decisions))
+	}
+}
+
+func TestHandleResolveDecision(t *testing.T) {
+	_, ms, h := newTestServer()
+
+	fields, _ := json.Marshal(map[string]any{
+		"prompt":  "Deploy?",
+		"options": json.RawMessage(`[{"id":"y","label":"Yes"},{"id":"n","label":"No"}]`),
+	})
+	ms.beads["kd-d1"] = &model.Bead{
+		ID: "kd-d1", Kind: model.KindData, Type: model.TypeDecision,
+		Title: "Deploy?", Status: model.StatusOpen, Fields: fields,
+	}
+
+	rec := doJSON(t, h, "POST", "/v1/decisions/kd-d1/resolve", map[string]any{
+		"selected_option": "y",
+		"responded_by":    "bob",
+	})
+	requireStatus(t, rec, 200)
+
+	var result struct {
+		Decision map[string]any `json:"decision"`
+		Issue    *model.Bead    `json:"issue"`
+	}
+	decodeJSON(t, rec, &result)
+
+	if result.Issue.Status != model.StatusClosed {
+		t.Fatalf("expected closed status, got %s", result.Issue.Status)
+	}
+	if result.Decision["selected_option"] != "y" {
+		t.Fatalf("expected selected_option 'y', got %v", result.Decision["selected_option"])
+	}
+}
+
+func TestHandleResolveDecision_RequiresInput(t *testing.T) {
+	_, ms, h := newTestServer()
+	ms.beads["kd-d1"] = &model.Bead{
+		ID: "kd-d1", Kind: model.KindData, Type: model.TypeDecision,
+		Title: "Q?", Status: model.StatusOpen,
+	}
+
+	rec := doJSON(t, h, "POST", "/v1/decisions/kd-d1/resolve", map[string]any{})
+	requireStatus(t, rec, 400)
+}
+
+func TestHandleCancelDecision(t *testing.T) {
+	_, ms, h := newTestServer()
+
+	fields, _ := json.Marshal(map[string]any{"prompt": "Deploy?"})
+	ms.beads["kd-d1"] = &model.Bead{
+		ID: "kd-d1", Kind: model.KindData, Type: model.TypeDecision,
+		Title: "Deploy?", Status: model.StatusOpen, Fields: fields,
+	}
+
+	rec := doJSON(t, h, "POST", "/v1/decisions/kd-d1/cancel", map[string]any{
+		"reason":      "no longer needed",
+		"canceled_by": "carol",
+	})
+	requireStatus(t, rec, 200)
+
+	var result struct {
+		Decision map[string]any `json:"decision"`
+		Issue    *model.Bead    `json:"issue"`
+	}
+	decodeJSON(t, rec, &result)
+
+	if result.Issue.Status != model.StatusClosed {
+		t.Fatalf("expected closed status, got %s", result.Issue.Status)
+	}
+}
+
 func TestHandleCreateBead_DueAtOnNonIssue(t *testing.T) {
 	_, ms, h := newTestServer()
 	ms.configs["type:note"] = &model.Config{Key: "type:note", Value: json.RawMessage(`{"kind":"data"}`)}
