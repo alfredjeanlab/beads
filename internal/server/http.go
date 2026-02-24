@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"os/exec"
 	"strconv"
 	"strings"
 	"time"
@@ -883,7 +882,7 @@ func (s *BeadsServer) handleHookEmit(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Soft gate AutoChecks — always warn, never block.
-	if warning := checkCommitPush(req.CWD); warning != "" {
+	if warning := hooks.CheckCommitPush(req.CWD); warning != "" {
 		resp.Warnings = append(resp.Warnings, warning)
 	}
 
@@ -909,22 +908,6 @@ func (s *BeadsServer) handleHookEmit(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, resp)
-}
-
-// checkCommitPush runs git status --porcelain in cwd.
-// Returns a warning string if there are uncommitted changes, empty string otherwise.
-func checkCommitPush(cwd string) string {
-	if cwd == "" {
-		return ""
-	}
-	out, err := exec.Command("git", "-C", cwd, "status", "--porcelain").Output()
-	if err != nil {
-		return ""
-	}
-	if len(strings.TrimSpace(string(out))) > 0 {
-		return "you have uncommitted changes — run git add/commit/push"
-	}
-	return ""
 }
 
 // executeHooksRequest is the JSON body for POST /v1/hooks/execute.
