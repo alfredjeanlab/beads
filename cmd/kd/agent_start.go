@@ -18,7 +18,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
-	"strings"
+	"strings" // used in containerName, localAgentEnv
 	"syscall"
 	"time"
 
@@ -95,10 +95,10 @@ func runAgentStart(cmd *cobra.Command, args []string) error {
 	fmt.Printf("[kd agent start] Registering agent '%s' with kbeads server...\n", agentName)
 	bead, err := beadsClient.CreateBead(ctx, &client.CreateBeadRequest{
 		Title:     agentName,
-		Type:      "agent",
+		Type:      "task",
 		Assignee:  agentName,
 		CreatedBy: actor,
-		Labels:    []string{"execution_target:local"},
+		Labels:    []string{"kd:agent", "execution_target:local"},
 	})
 	if err != nil {
 		return fmt.Errorf("create agent bead: %w", err)
@@ -141,7 +141,8 @@ func runLocal(ctx context.Context, agentName, agentBeadID, role, dir, agentComma
 	// Build env for the coop+claude subprocess.
 	env := localAgentEnv(agentName, agentBeadID, role, dir, coopAddr)
 
-	// Build coop command: coop --agent=claude --port=<N> -- <agentCommand>
+	// Build coop command: coop --agent=claude --port=<N> -- sh -c '<agentCommand>'
+	// Wrap in sh -c so shell quoting in --command is handled correctly.
 	coopArgs := []string{
 		"--agent=claude",
 		fmt.Sprintf("--port=%d", coopPort),
@@ -149,8 +150,8 @@ func runLocal(ctx context.Context, agentName, agentBeadID, role, dir, agentComma
 		"--cols=200",
 		"--rows=50",
 		"--",
+		"sh", "-c", agentCommand,
 	}
-	coopArgs = append(coopArgs, strings.Fields(agentCommand)...)
 
 	coopProc := exec.CommandContext(ctx, "coop", coopArgs...)
 	coopProc.Dir = dir
