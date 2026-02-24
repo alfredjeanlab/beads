@@ -315,6 +315,12 @@ func (c *GRPCClient) EmitHook(_ context.Context, _ *EmitHookRequest) (*EmitHookR
 	return nil, fmt.Errorf("EmitHook is not supported over gRPC transport; use --transport=http")
 }
 
+// --- Roster ---
+
+func (c *GRPCClient) GetAgentRoster(_ context.Context, _ int) (*AgentRosterResponse, error) {
+	return nil, fmt.Errorf("GetAgentRoster is not supported over gRPC transport; use --transport=http")
+}
+
 // --- Gates ---
 
 func (c *GRPCClient) ListGates(_ context.Context, _ string) ([]model.GateRow, error) {

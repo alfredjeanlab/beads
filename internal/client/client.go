@@ -53,6 +53,9 @@ type BeadsClient interface {
 	SatisfyGate(ctx context.Context, agentBeadID, gateID string) error
 	ClearGate(ctx context.Context, agentBeadID, gateID string) error
 
+	// Roster
+	GetAgentRoster(ctx context.Context, staleThresholdSecs int) (*AgentRosterResponse, error)
+
 	// Health
 	Health(ctx context.Context) (string, error)
 
@@ -76,6 +79,34 @@ type EmitHookResponse struct {
 	Reason   string   `json:"reason,omitempty"`
 	Warnings []string `json:"warnings,omitempty"`
 	Inject   string   `json:"inject,omitempty"`
+}
+
+// AgentRosterResponse is the response from GetAgentRoster.
+type AgentRosterResponse struct {
+	Actors         []RosterEntry  `json:"actors"`
+	UnclaimedTasks []UnclaimedTask `json:"unclaimed_tasks"`
+}
+
+// RosterEntry represents one agent in the roster.
+type RosterEntry struct {
+	Actor     string  `json:"actor"`
+	TaskID    string  `json:"task_id,omitempty"`
+	TaskTitle string  `json:"task_title,omitempty"`
+	EpicID    string  `json:"epic_id,omitempty"`
+	EpicTitle string  `json:"epic_title,omitempty"`
+	IdleSecs  float64 `json:"idle_secs"`
+	LastEvent string  `json:"last_event,omitempty"`
+	ToolName  string  `json:"tool_name,omitempty"`
+	SessionID string  `json:"session_id,omitempty"`
+	CWD       string  `json:"cwd,omitempty"`
+	Reaped    bool    `json:"reaped,omitempty"`
+}
+
+// UnclaimedTask is an in_progress bead with no assignee.
+type UnclaimedTask struct {
+	ID       string `json:"id"`
+	Title    string `json:"title"`
+	Priority int    `json:"priority"`
 }
 
 // CreateBeadRequest holds parameters for creating a bead.

@@ -275,6 +275,17 @@ func (c *HTTPClient) ClearGate(ctx context.Context, agentBeadID, gateID string) 
 	return c.doJSON(ctx, http.MethodDelete, path, nil, nil)
 }
 
+// --- Roster ---
+
+func (c *HTTPClient) GetAgentRoster(ctx context.Context, staleThresholdSecs int) (*AgentRosterResponse, error) {
+	path := fmt.Sprintf("/v1/agents/roster?stale_threshold_secs=%d", staleThresholdSecs)
+	var resp AgentRosterResponse
+	if err := c.doJSON(ctx, http.MethodGet, path, nil, &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
 // --- Health ---
 
 func (c *HTTPClient) Health(ctx context.Context) (string, error) {
