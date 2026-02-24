@@ -33,8 +33,7 @@ func (m *muxClient) Register(ctx context.Context, sessionID, coopURL, role, agen
 
 	// Wait for local coop to be healthy before registering.
 	if err := m.waitForCoop(ctx, coopURL); err != nil {
-		fmt.Printf("[kd agent start] WARNING: coop health check before mux registration: %v
-", err)
+		fmt.Printf("[kd agent start] WARNING: coop health check before mux registration: %v\n", err)
 	}
 
 	type metadata struct {
@@ -75,14 +74,12 @@ func (m *muxClient) Register(ctx context.Context, sessionID, coopURL, role, agen
 	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
-		fmt.Printf("[kd agent start] WARNING: mux registration failed: %v
-", err)
+		fmt.Printf("[kd agent start] WARNING: mux registration failed: %v\n", err)
 		return nil
 	}
 	resp.Body.Close()
 
-	fmt.Printf("[kd agent start] registered with mux as '%s'
-", sessionID)
+	fmt.Printf("[kd agent start] registered with mux as '%s'\n", sessionID)
 	return nil
 }
 
@@ -103,13 +100,11 @@ func (m *muxClient) Deregister(sessionID string) {
 	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
-		fmt.Printf("[kd agent start] WARNING: mux deregister failed: %v
-", err)
+		fmt.Printf("[kd agent start] WARNING: mux deregister failed: %v\n", err)
 		return
 	}
 	resp.Body.Close()
-	fmt.Printf("[kd agent start] deregistered from mux (%s)
-", sessionID)
+	fmt.Printf("[kd agent start] deregistered from mux (%s)\n", sessionID)
 }
 
 // waitForCoop polls the coop health endpoint until it returns 200 or ctx expires.

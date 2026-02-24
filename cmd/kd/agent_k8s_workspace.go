@@ -23,8 +23,7 @@ func setupWorkspace(cfg k8sConfig) error {
 	if data, err := os.ReadFile("/etc/platform-version"); err == nil {
 		if v := strings.TrimSpace(string(data)); v != "" {
 			os.Setenv("BEADS_PLATFORM_VERSION", v)
-			fmt.Printf("[kd agent start] platform version: %s
-", v)
+			fmt.Printf("[kd agent start] platform version: %s\n", v)
 		}
 	}
 
@@ -33,35 +32,29 @@ func setupWorkspace(cfg k8sConfig) error {
 	runGitGlobal("config", "--global", "user.name", authorName)
 	runGitGlobal("config", "--global", "user.email", cfg.role+"@gasboat.local")
 	runGitGlobal("config", "--global", "--add", "safe.directory", "*")
-	fmt.Printf("[kd agent start] git global config set (user: %s)
-", authorName)
+	fmt.Printf("[kd agent start] git global config set (user: %s)\n", authorName)
 
 	// 3. Git credentials.
 	gitUser := os.Getenv("GIT_USERNAME")
 	gitToken := os.Getenv("GIT_TOKEN")
 	if gitUser != "" && gitToken != "" {
 		if err := writeGitCredentials(gitUser, gitToken); err != nil {
-			fmt.Printf("[kd agent start] warning: git credentials: %v
-", err)
+			fmt.Printf("[kd agent start] warning: git credentials: %v\n", err)
 		} else {
-			fmt.Printf("[kd agent start] git credentials configured for %s@github.com
-", gitUser)
+			fmt.Printf("[kd agent start] git credentials configured for %s@github.com\n", gitUser)
 		}
 	}
 
 	// 4. Workspace git init or stale-branch reset.
 	if _, err := os.Stat(filepath.Join(cfg.workspace, ".git")); os.IsNotExist(err) {
-		fmt.Printf("[kd agent start] initialising git repo in %s
-", cfg.workspace)
+		fmt.Printf("[kd agent start] initialising git repo in %s\n", cfg.workspace)
 		if err := runGitIn(cfg.workspace, "init", "-q"); err != nil {
-			fmt.Printf("[kd agent start] warning: git init: %v
-", err)
+			fmt.Printf("[kd agent start] warning: git init: %v\n", err)
 		}
 		runGitIn(cfg.workspace, "config", "user.name", authorName)
 		runGitIn(cfg.workspace, "config", "user.email", cfg.role+"@gasboat.local")
 	} else {
-		fmt.Printf("[kd agent start] git repo already exists in %s
-", cfg.workspace)
+		fmt.Printf("[kd agent start] git repo already exists in %s\n", cfg.workspace)
 		resetStaleBranch(cfg.workspace)
 	}
 
@@ -69,11 +62,9 @@ func setupWorkspace(cfg k8sConfig) error {
 	if host := os.Getenv("BEADS_DAEMON_HOST"); host != "" {
 		port := envOr("BEADS_DAEMON_HTTP_PORT", "9080")
 		daemonURL := fmt.Sprintf("http://%s:%s", host, port)
-		fmt.Printf("[kd agent start] configuring daemon at %s
-", daemonURL)
+		fmt.Printf("[kd agent start] configuring daemon at %s\n", daemonURL)
 		if err := writeDaemonConfig(cfg.workspace, daemonURL); err != nil {
-			fmt.Printf("[kd agent start] warning: daemon config: %v
-", err)
+			fmt.Printf("[kd agent start] warning: daemon config: %v\n", err)
 		}
 	}
 
@@ -95,26 +86,22 @@ func setupPVC(cfg k8sConfig) error {
 
 	claudeDir := filepath.Join(homeDir(), ".claude")
 	if isMountpoint(claudeDir) {
-		fmt.Printf("[kd agent start] %s is a mount point (subPath) — already PVC-backed
-", claudeDir)
+		fmt.Printf("[kd agent start] %s is a mount point (subPath) — already PVC-backed\n", claudeDir)
 	} else {
 		os.RemoveAll(claudeDir)
 		if err := os.Symlink(claudeState, claudeDir); err != nil {
 			return fmt.Errorf("symlink %s → %s: %w", claudeDir, claudeState, err)
 		}
-		fmt.Printf("[kd agent start] linked %s → %s
-", claudeDir, claudeState)
+		fmt.Printf("[kd agent start] linked %s → %s\n", claudeDir, claudeState)
 	}
 
 	os.Setenv("XDG_STATE_HOME", stateDir)
-	fmt.Printf("[kd agent start] XDG_STATE_HOME=%s
-", stateDir)
+	fmt.Printf("[kd agent start] XDG_STATE_HOME=%s\n", stateDir)
 
 	// Dev tools PATH.
 	if _, err := os.Stat("/usr/local/go/bin"); err == nil {
 		os.Setenv("PATH", "/usr/local/go/bin:"+os.Getenv("PATH"))
-		fmt.Printf("[kd agent start] added /usr/local/go/bin to PATH
-")
+		fmt.Printf("[kd agent start] added /usr/local/go/bin to PATH\n")
 	}
 
 	return nil
@@ -138,13 +125,11 @@ func writeClaudeSettings(claudeDir string) error {
 	plugins := map[string]bool{}
 	if _, err := exec.LookPath("gopls"); err == nil {
 		plugins["gopls-lsp@claude-plugins-official"] = true
-		fmt.Printf("[kd agent start] enabling gopls LSP plugin
-")
+		fmt.Printf("[kd agent start] enabling gopls LSP plugin\n")
 	}
 	if _, err := exec.LookPath("rust-analyzer"); err == nil {
 		plugins["rust-analyzer-lsp@claude-plugins-official"] = true
-		fmt.Printf("[kd agent start] enabling rust-analyzer LSP plugin
-")
+		fmt.Printf("[kd agent start] enabling rust-analyzer LSP plugin\n")
 	}
 	if len(plugins) > 0 {
 		s.EnabledPlugins = plugins
@@ -197,8 +182,7 @@ When you hit a Stop hook block, you MUST create a decision checkpoint:
 `, cfg.role, cfg.role, projectLine, cfg.agent)
 
 		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
-			fmt.Printf("[kd agent start] warning: write CLAUDE.md: %v
-", err)
+			fmt.Printf("[kd agent start] warning: write CLAUDE.md: %v\n", err)
 			return
 		}
 	}
@@ -236,8 +220,7 @@ func writeOnboardingSkip() {
 	data := []byte(`{"hasCompletedOnboarding":true,"lastOnboardingVersion":"2.1.37","preferredTheme":"dark","bypassPermissionsModeAccepted":true}` + "\n")
 	path := filepath.Join(homeDir(), ".claude.json")
 	if err := os.WriteFile(path, data, 0o600); err != nil {
-		fmt.Printf("[kd agent start] warning: write .claude.json: %v
-", err)
+		fmt.Printf("[kd agent start] warning: write .claude.json: %v\n", err)
 	}
 }
 
@@ -265,16 +248,14 @@ func resetStaleBranch(workspace string) {
 	if branch == "" || branch == "main" || branch == "master" {
 		return
 	}
-	fmt.Printf("[kd agent start] WARNING: workspace on stale branch '%s', resetting to main
-", branch)
+	fmt.Printf("[kd agent start] WARNING: workspace on stale branch '%s', resetting to main\n", branch)
 	runGitIn(workspace, "checkout", "--", ".")
 	runGitIn(workspace, "clean", "-fd")
 	if runGitIn(workspace, "checkout", "main") != nil {
 		runGitIn(workspace, "checkout", "-b", "main")
 	}
 	out, _ = exec.Command("git", "-C", workspace, "branch", "--show-current").Output()
-	fmt.Printf("[kd agent start] workspace now on branch: %s
-", strings.TrimSpace(string(out)))
+	fmt.Printf("[kd agent start] workspace now on branch: %s\n", strings.TrimSpace(string(out)))
 }
 
 func writeGitCredentials(user, token string) error {

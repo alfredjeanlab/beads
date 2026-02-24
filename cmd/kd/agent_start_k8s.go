@@ -74,8 +74,7 @@ func runAgentStartK8s(cmd *cobra.Command, args []string) error {
 		hostname:       hostname,
 	}
 
-	fmt.Printf("[kd agent start] starting %s agent (mode: k8s): %s (project: %s)
-",
+	fmt.Printf("[kd agent start] starting %s agent (mode: k8s): %s (project: %s)\n",
 		cfg.role, cfg.agent, orStr(cfg.project, "none"))
 
 	// ── One-time setup (idempotent on restart) ──────────────────────────
@@ -96,17 +95,14 @@ func runAgentStartK8s(cmd *cobra.Command, args []string) error {
 
 	claudeDir := filepath.Join(homeDir(), ".claude")
 	if err := writeClaudeSettings(claudeDir); err != nil {
-		fmt.Printf("[kd agent start] warning: write claude settings: %v
-", err)
+		fmt.Printf("[kd agent start] warning: write claude settings: %v\n", err)
 	}
 
 	// Hook materialization via kd setup claude (falls back to defaults).
 	if err := runSetupClaude(context.Background(), workspace, cfg.role); err != nil {
-		fmt.Printf("[kd agent start] config beads not found, installing default hooks
-")
+		fmt.Printf("[kd agent start] config beads not found, installing default hooks\n")
 		if err2 := runSetupClaudeDefaults(workspace); err2 != nil {
-			fmt.Printf("[kd agent start] warning: could not write workspace .claude/settings.json: %v
-", err2)
+			fmt.Printf("[kd agent start] warning: could not write workspace .claude/settings.json: %v\n", err2)
 		}
 	}
 
@@ -124,8 +120,7 @@ func runAgentStartK8s(cmd *cobra.Command, args []string) error {
 	coopURL := fmt.Sprintf("http://%s:%d", cfg.podIP, cfg.coopPort)
 	go func() {
 		if err := mux.Register(ctx, cfg.hostname, coopURL, cfg.role, cfg.agent, cfg.hostname, cfg.podIP); err != nil {
-			fmt.Printf("[kd agent start] mux register error: %v
-", err)
+			fmt.Printf("[kd agent start] mux register error: %v\n", err)
 		}
 	}()
 	defer mux.Deregister(cfg.hostname)
@@ -168,8 +163,7 @@ func runAgentStartK8s(cmd *cobra.Command, args []string) error {
 			restarts = 0
 		}
 		restarts++
-		fmt.Printf("[kd agent start] restarting (attempt %d/%d) in 2s...
-", restarts, cfg.maxRestarts)
+		fmt.Printf("[kd agent start] restarting (attempt %d/%d) in 2s...\n", restarts, cfg.maxRestarts)
 
 		select {
 		case <-ctx.Done():
@@ -190,11 +184,9 @@ func runCoopOnce(ctx context.Context, cfg k8sConfig, coopStateDir, resumeLog str
 	}
 	if resumeLog != "" {
 		coopArgs = append(coopArgs, "--resume", resumeLog)
-		fmt.Printf("[kd agent start] starting coop (%s/%s) with resume
-", cfg.role, cfg.agent)
+		fmt.Printf("[kd agent start] starting coop (%s/%s) with resume\n", cfg.role, cfg.agent)
 	} else {
-		fmt.Printf("[kd agent start] starting coop (%s/%s)
-", cfg.role, cfg.agent)
+		fmt.Printf("[kd agent start] starting coop (%s/%s)\n", cfg.role, cfg.agent)
 	}
 	coopArgs = append(coopArgs, "--", "sh", "-c", cfg.command)
 

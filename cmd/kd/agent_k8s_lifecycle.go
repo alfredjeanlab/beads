@@ -48,15 +48,13 @@ func autoBypassStartup(ctx context.Context, coopPort int) {
 			screen, _ := getScreenText(client, base)
 
 			if strings.Contains(screen, "Resume Session") {
-				fmt.Printf("[kd agent start] detected resume session picker, pressing Escape
-")
+				fmt.Printf("[kd agent start] detected resume session picker, pressing Escape\n")
 				postKeys(client, base, "Escape")
 				time.Sleep(3 * time.Second)
 				continue
 			}
 			if strings.Contains(screen, "Detected a custom API key") {
-				fmt.Printf("[kd agent start] detected API key prompt, selecting Yes
-")
+				fmt.Printf("[kd agent start] detected API key prompt, selecting Yes\n")
 				postKeys(client, base, "Up", "Return")
 				time.Sleep(3 * time.Second)
 				continue
@@ -74,8 +72,7 @@ func autoBypassStartup(ctx context.Context, coopPort int) {
 				if pt, ok := state["prompt"].(map[string]any); ok {
 					subtype, _ = pt["subtype"].(string)
 				}
-				fmt.Printf("[kd agent start] auto-accepting setup prompt (subtype: %s)
-", subtype)
+				fmt.Printf("[kd agent start] auto-accepting setup prompt (subtype: %s)\n", subtype)
 				respondToAgent(client, base, 2)
 				falsePositives = 0
 				time.Sleep(5 * time.Second)
@@ -83,14 +80,12 @@ func autoBypassStartup(ctx context.Context, coopPort int) {
 			}
 			falsePositives++
 			if falsePositives >= 5 {
-				fmt.Printf("[kd agent start] skipping false-positive setup prompt
-")
+				fmt.Printf("[kd agent start] skipping false-positive setup prompt\n")
 				return
 			}
 		}
 	}
-	fmt.Printf("[kd agent start] WARNING: auto-bypass timed out after 60s
-")
+	fmt.Printf("[kd agent start] WARNING: auto-bypass timed out after 60s\n")
 }
 
 // injectInitialPrompt waits for the agent to reach idle state, then sends a
@@ -114,16 +109,14 @@ func injectInitialPrompt(ctx context.Context, coopPort int, role string) {
 		agentState, _ := state["state"].(string)
 
 		if agentState == "working" {
-			fmt.Printf("[kd agent start] agent already working, skipping initial prompt
-")
+			fmt.Printf("[kd agent start] agent already working, skipping initial prompt\n")
 			return
 		}
 		if agentState != "idle" {
 			continue
 		}
 
-		fmt.Printf("[kd agent start] injecting initial work prompt (role: %s)
-", role)
+		fmt.Printf("[kd agent start] injecting initial work prompt (role: %s)\n", role)
 		body, _ := json.Marshal(map[string]string{"message": nudge})
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, base+"/agent/nudge", bytes.NewReader(body))
 		if err != nil {
@@ -132,8 +125,7 @@ func injectInitialPrompt(ctx context.Context, coopPort int, role string) {
 		req.Header.Set("Content-Type", "application/json")
 		resp, err := client.Do(req)
 		if err != nil {
-			fmt.Printf("[kd agent start] WARNING: nudge failed: %v
-", err)
+			fmt.Printf("[kd agent start] WARNING: nudge failed: %v\n", err)
 			return
 		}
 		defer resp.Body.Close()
@@ -143,11 +135,9 @@ func injectInitialPrompt(ctx context.Context, coopPort int, role string) {
 		}
 		json.NewDecoder(resp.Body).Decode(&result)
 		if result.Delivered {
-			fmt.Printf("[kd agent start] initial prompt delivered
-")
+			fmt.Printf("[kd agent start] initial prompt delivered\n")
 		} else {
-			fmt.Printf("[kd agent start] WARNING: nudge not delivered: %s
-", result.Reason)
+			fmt.Printf("[kd agent start] WARNING: nudge not delivered: %s\n", result.Reason)
 		}
 		return
 	}
@@ -174,8 +164,7 @@ func monitorAgentExit(ctx context.Context, coopPort int) {
 		}
 		agentState, _ := state["state"].(string)
 		if agentState == "exited" {
-			fmt.Printf("[kd agent start] agent exited, requesting coop shutdown
-")
+			fmt.Printf("[kd agent start] agent exited, requesting coop shutdown\n")
 			req, _ := http.NewRequestWithContext(ctx, http.MethodPost, base+"/shutdown", nil)
 			client.Do(req) //nolint:errcheck
 			return
@@ -222,8 +211,7 @@ func findResumeSession(claudeStateDir string, sessionResume bool) string {
 	})
 	const maxStaleRetries = 2
 	if staleCount >= maxStaleRetries {
-		fmt.Printf("[kd agent start] skipping resume: %d stale session(s) found (max %d)
-", staleCount, maxStaleRetries)
+		fmt.Printf("[kd agent start] skipping resume: %d stale session(s) found (max %d)\n", staleCount, maxStaleRetries)
 		return ""
 	}
 
@@ -261,11 +249,9 @@ func findResumeSession(claudeStateDir string, sessionResume bool) string {
 func retireStaleSession(logPath string) {
 	stalePath := logPath + ".stale"
 	if err := os.Rename(logPath, stalePath); err != nil {
-		fmt.Printf("[kd agent start] WARNING: could not retire stale session: %v
-", err)
+		fmt.Printf("[kd agent start] WARNING: could not retire stale session: %v\n", err)
 	} else {
-		fmt.Printf("[kd agent start] retired stale session: %s → %s
-", logPath, stalePath)
+		fmt.Printf("[kd agent start] retired stale session: %s → %s\n", logPath, stalePath)
 	}
 }
 

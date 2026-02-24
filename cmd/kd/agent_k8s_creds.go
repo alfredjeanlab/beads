@@ -42,48 +42,41 @@ func provisionCredentials(claudeStateDir string) credMode {
 
 	// 1. PVC credentials already present.
 	if _, err := os.Stat(credsFile); err == nil {
-		fmt.Printf("[kd agent start] using existing PVC credentials
-")
+		fmt.Printf("[kd agent start] using existing PVC credentials\n")
 		return credPVC
 	}
 
 	// 2. K8s secret mount.
 	if _, err := os.Stat(staging); err == nil {
 		if err := copyFile(staging, credsFile, 0o600); err == nil {
-			fmt.Printf("[kd agent start] seeded Claude credentials from K8s secret
-")
+			fmt.Printf("[kd agent start] seeded Claude credentials from K8s secret\n")
 			return credSecret
 		}
 	}
 
 	// 3. CLAUDE_CODE_OAUTH_TOKEN env — coop auto-writes .credentials.json.
 	if os.Getenv("CLAUDE_CODE_OAUTH_TOKEN") != "" {
-		fmt.Printf("[kd agent start] CLAUDE_CODE_OAUTH_TOKEN set — coop will auto-write credentials
-")
+		fmt.Printf("[kd agent start] CLAUDE_CODE_OAUTH_TOKEN set — coop will auto-write credentials\n")
 		return credOAuthEnv
 	}
 
 	// 4. ANTHROPIC_API_KEY env — API key mode, no credentials file needed.
 	if os.Getenv("ANTHROPIC_API_KEY") != "" {
-		fmt.Printf("[kd agent start] ANTHROPIC_API_KEY set — using API key mode
-")
+		fmt.Printf("[kd agent start] ANTHROPIC_API_KEY set — using API key mode\n")
 		return credAPIKey
 	}
 
 	// 5. coopmux distribute endpoint.
 	if muxURL := os.Getenv("COOP_MUX_URL"); muxURL != "" {
 		if err := fetchMuxCredentials(muxURL, credsFile); err == nil {
-			fmt.Printf("[kd agent start] seeded credentials from coopmux
-")
+			fmt.Printf("[kd agent start] seeded credentials from coopmux\n")
 			return credMuxFetch
 		} else {
-			fmt.Printf("[kd agent start] WARNING: coopmux credential fetch failed: %v
-", err)
+			fmt.Printf("[kd agent start] WARNING: coopmux credential fetch failed: %v\n", err)
 		}
 	}
 
-	fmt.Printf("[kd agent start] WARNING: no Claude credentials available — agent may not authenticate
-")
+	fmt.Printf("[kd agent start] WARNING: no Claude credentials available — agent may not authenticate\n")
 	return credNone
 }
 
@@ -130,8 +123,7 @@ func fetchMuxCredentials(muxURL, credsFile string) error {
 // before they expire. It exits when ctx is cancelled (SIGTERM).
 func oauthRefreshLoop(ctx context.Context, claudeStateDir string, mode credMode) {
 	if mode == credAPIKey {
-		fmt.Printf("[kd agent start] API key mode — skipping OAuth refresh loop
-")
+		fmt.Printf("[kd agent start] API key mode — skipping OAuth refresh loop\n")
 		return
 	}
 
@@ -157,17 +149,14 @@ func oauthRefreshLoop(ctx context.Context, claudeStateDir string, mode credMode)
 		case <-ticker.C:
 			if err := maybeRefreshOAuth(credsFile); err != nil {
 				consecutiveFails++
-				fmt.Printf("[kd agent start] WARNING: OAuth refresh failed (%d/%d): %v
-", consecutiveFails, maxFails, err)
+				fmt.Printf("[kd agent start] WARNING: OAuth refresh failed (%d/%d): %v\n", consecutiveFails, maxFails, err)
 				if consecutiveFails >= maxFails {
 					// Check if agent is still active before terminating.
 					if isCoopAgentActive() {
-						fmt.Printf("[kd agent start] WARNING: OAuth refresh failing but agent is active, not terminating
-")
+						fmt.Printf("[kd agent start] WARNING: OAuth refresh failing but agent is active, not terminating\n")
 						consecutiveFails = 0
 					} else {
-						fmt.Printf("[kd agent start] FATAL: OAuth refresh failed %d consecutive times, terminating
-", maxFails)
+						fmt.Printf("[kd agent start] FATAL: OAuth refresh failed %d consecutive times, terminating\n", maxFails)
 						os.Exit(1)
 					}
 				}
@@ -215,8 +204,7 @@ func maybeRefreshOAuth(credsFile string) error {
 		return nil // more than 1 hour remaining
 	}
 
-	fmt.Printf("[kd agent start] OAuth token expires in %dm, refreshing...
-", remainingMS/60_000)
+	fmt.Printf("[kd agent start] OAuth token expires in %dm, refreshing...\n", remainingMS/60_000)
 
 	type tokenRequest struct {
 		GrantType    string `json:"grant_type"`
@@ -271,8 +259,7 @@ func maybeRefreshOAuth(credsFile string) error {
 		return err
 	}
 
-	fmt.Printf("[kd agent start] OAuth credentials refreshed (expires in %dh)
-", tok.ExpiresIn/3600)
+	fmt.Printf("[kd agent start] OAuth credentials refreshed (expires in %dh)\n", tok.ExpiresIn/3600)
 	return nil
 }
 
