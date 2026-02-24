@@ -137,30 +137,6 @@ func (h *Handler) HandleSessionEvent(ctx context.Context, event SessionEvent) Ho
 	return resp
 }
 
-// Session event topics for NATS.
-const (
-	TopicSessionEnd       = "beads.session.end"
-	TopicSessionPreCommit = "beads.session.pre_commit"
-	TopicSessionPrePush   = "beads.session.pre_push"
-	TopicSessionHandoff   = "beads.session.handoff"
-)
-
-// topicToTrigger maps a NATS topic to an advice hook trigger.
-func topicToTrigger(topic string) string {
-	switch topic {
-	case TopicSessionEnd:
-		return TriggerSessionEnd
-	case TopicSessionPreCommit:
-		return TriggerBeforeCommit
-	case TopicSessionPrePush:
-		return TriggerBeforePush
-	case TopicSessionHandoff:
-		return TriggerBeforeHandoff
-	default:
-		return ""
-	}
-}
-
 // StartSubscriber listens for session lifecycle events on the event bus and
 // runs matching advice hooks. It blocks until ctx is cancelled.
 func (h *Handler) StartSubscriber(ctx context.Context, sub events.Subscriber) error {
