@@ -883,8 +883,8 @@ func (s *BeadsServer) handleHookEmit(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Soft gate AutoChecks — always warn, never block.
-	if w := checkCommitPush(req.CWD); w != "" {
-		resp.Warnings = append(resp.Warnings, w)
+	if warning := checkCommitPush(req.CWD); warning != "" {
+		resp.Warnings = append(resp.Warnings, warning)
 	}
 
 	// TODO: bead-update soft check — requires checking KD_HOOK_BEAD env var from the
