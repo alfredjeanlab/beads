@@ -34,9 +34,32 @@ kbeads/
 ```sh
 go build ./cmd/kd                # build the CLI
 go test ./...                    # run all tests (uses sqlmock; no external deps)
+make proto                       # regenerate protobuf Go code
 ```
 
 Database tests use `go-sqlmock`; no running Postgres instance is needed for `go test`.
+
+## Protobuf Generation
+
+Generated Go files live in `gen/beads/v1/` and are produced from the proto definitions in `proto/beads/v1/`. The `go_package` option in each `.proto` file controls the output module path (`github.com/groblegark/kbeads/gen/beads/v1;beadsv1`).
+
+**When to regenerate:**
+- After modifying any `.proto` file under `proto/`
+- After cherry-picking from upstream (`alfredjeanlab/beads`), which uses a different module path — the proto files already have the correct `go_package` for this fork, so regenerating fixes the generated code
+
+**How to regenerate:**
+```sh
+make proto                       # or: ./scripts/gen-proto.sh
+```
+
+**Required tools:**
+| Tool | Version | Install |
+|------|---------|---------|
+| `protoc` | v6.x | [GitHub releases](https://github.com/protocolbuffers/protobuf/releases) |
+| `protoc-gen-go` | v1.36.11 | `go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.11` |
+| `protoc-gen-go-grpc` | v1.6.1 | `go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.6.1` |
+
+The plugin versions must match what is in `go.mod` (`google.golang.org/protobuf` and `google.golang.org/grpc`). Mismatched versions can produce code that fails to compile.
 
 ## Configuration (environment variables)
 
