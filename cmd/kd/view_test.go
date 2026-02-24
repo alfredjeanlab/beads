@@ -7,8 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	beadsv1 "github.com/groblegark/kbeads/gen/beads/v1"
-	"google.golang.org/protobuf/types/known/timestamppb"
+	"time"
+
+	"github.com/groblegark/kbeads/internal/model"
 )
 
 func TestViewConfigDeserialization(t *testing.T) {
@@ -77,12 +78,12 @@ func TestViewConfigDeserialization(t *testing.T) {
 }
 
 func TestBeadField(t *testing.T) {
-	b := &beadsv1.Bead{
-		Id:        "bd-123",
+	b := &model.Bead{
+		ID:        "bd-123",
 		Title:     "Test bead",
-		Status:    "open",
-		Type:      "task",
-		Kind:      "issue",
+		Status:    model.StatusOpen,
+		Type:      model.TypeTask,
+		Kind:      model.KindIssue,
 		Priority:  2,
 		Assignee:  "alice",
 		Owner:     "bob",
@@ -119,7 +120,7 @@ func TestBeadField(t *testing.T) {
 
 func TestBeadFieldTitleTruncation(t *testing.T) {
 	longTitle := strings.Repeat("a", 60)
-	b := &beadsv1.Bead{Title: longTitle}
+	b := &model.Bead{Title: longTitle}
 	got := beadField(b, "title")
 	if len(got) != 50 {
 		t.Errorf("expected truncated title of length 50, got %d", len(got))
@@ -151,12 +152,12 @@ func captureStdout(t *testing.T, fn func()) string {
 }
 
 func TestPrintBeadTableFiltered(t *testing.T) {
-	b := &beadsv1.Bead{
-		Id:       "bd-abc",
+	b := &model.Bead{
+		ID:       "bd-abc",
 		Title:    "Filtered bead",
-		Status:   "open",
-		Type:     "task",
-		Kind:     "issue",
+		Status:   model.StatusOpen,
+		Type:     model.TypeTask,
+		Kind:     model.KindIssue,
 		Priority: 1,
 		Assignee: "alice",
 		Owner:    "bob",
@@ -203,8 +204,8 @@ func TestPrintDepSubSection(t *testing.T) {
 	t.Run("resolved deps", func(t *testing.T) {
 		deps := []resolvedDep{
 			{
-				Dep:  &beadsv1.Dependency{DependsOnId: "bd-xyz", Type: "blocks"},
-				Bead: &beadsv1.Bead{Id: "bd-xyz", Title: "Setup DB", Status: "open"},
+				Dep:  &model.Dependency{DependsOnID: "bd-xyz", Type: model.DepBlocks},
+				Bead: &model.Bead{ID: "bd-xyz", Title: "Setup DB", Status: model.StatusOpen},
 			},
 		}
 		out := captureStdout(t, func() { printDepSubSection(deps, nil) })
@@ -222,7 +223,7 @@ func TestPrintDepSubSection(t *testing.T) {
 	t.Run("unresolved bead fallback", func(t *testing.T) {
 		deps := []resolvedDep{
 			{
-				Dep:  &beadsv1.Dependency{DependsOnId: "bd-missing", Type: "blocks"},
+				Dep:  &model.Dependency{DependsOnID: "bd-missing", Type: model.DepBlocks},
 				Bead: nil,
 			},
 		}
@@ -238,8 +239,8 @@ func TestPrintDepSubSection(t *testing.T) {
 	t.Run("custom fields", func(t *testing.T) {
 		deps := []resolvedDep{
 			{
-				Dep:  &beadsv1.Dependency{DependsOnId: "bd-xyz", Type: "parent-child"},
-				Bead: &beadsv1.Bead{Id: "bd-xyz", Title: "Epic", Status: "in_progress", Assignee: "bob"},
+				Dep:  &model.Dependency{DependsOnID: "bd-xyz", Type: model.DepParentChild},
+				Bead: &model.Bead{ID: "bd-xyz", Title: "Epic", Status: model.StatusInProgress, Assignee: "bob"},
 			},
 		}
 		out := captureStdout(t, func() { printDepSubSection(deps, []string{"id", "assignee"}) })
@@ -264,11 +265,11 @@ func TestPrintComments(t *testing.T) {
 	})
 
 	t.Run("with comments", func(t *testing.T) {
-		comments := []*beadsv1.Comment{
+		comments := []*model.Comment{
 			{
 				Author:    "alice",
 				Text:      "Looks good",
-				CreatedAt: timestamppb.Now(),
+				CreatedAt: time.Now(),
 			},
 			{
 				Author: "bob",

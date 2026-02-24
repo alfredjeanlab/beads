@@ -7,7 +7,7 @@ import (
 	"os"
 	"text/tabwriter"
 
-	beadsv1 "github.com/groblegark/kbeads/gen/beads/v1"
+	"github.com/groblegark/kbeads/internal/model"
 	"github.com/spf13/cobra"
 )
 
@@ -30,18 +30,16 @@ var treeCmd = &cobra.Command{
 }
 
 func runTreeGraph(beadID string, depth int, filterType string) error {
-	resp, err := client.GetBead(context.Background(), &beadsv1.GetBeadRequest{
-		Id: beadID,
-	})
+	bead, err := beadsClient.GetBead(context.Background(), beadID)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
 
-	bead := resp.GetBead()
-	fmt.Printf("%s [%s] %s\n", bead.GetId(), bead.GetStatus(), bead.GetTitle())
+	
+	fmt.Printf("%s [%s] %s\n", bead.ID, string(bead.Status), bead.Title)
 
-	deps := bead.GetDependencies()
+	deps := bead.Dependencies
 	if filterType != "" {
 		deps = filterDepsByType(deps, []string{filterType})
 	}
@@ -55,7 +53,7 @@ func runTreeFlat(beadID string, filterType string) error {
 		types = []string{filterType}
 	}
 
-	deps, err := fetchAndResolveDeps(context.Background(), client, beadID, types)
+	deps, err := fetchAndResolveDeps(context.Background(), beadsClient, beadID, types)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
@@ -76,12 +74,12 @@ func runTreeFlat(beadID string, filterType string) error {
 		var out []jsonChild
 		for _, rd := range deps {
 			jc := jsonChild{
-				DependsOnID: rd.Dep.GetDependsOnId(),
-				Type:        rd.Dep.GetType(),
+				DependsOnID: rd.Dep.DependsOnID,
+				Type:        string(rd.Dep.Type),
 			}
 			if rd.Bead != nil {
-				jc.Status = rd.Bead.GetStatus()
-				jc.Title = rd.Bead.GetTitle()
+				jc.Status = string(rd.Bead.Status)
+				jc.Title = rd.Bead.Title
 			}
 			out = append(out, jc)
 		}
@@ -98,15 +96,15 @@ func runTreeFlat(beadID string, filterType string) error {
 			status := "(unknown)"
 			title := "(error fetching)"
 			if rd.Bead != nil {
-				status = rd.Bead.GetStatus()
-				title = rd.Bead.GetTitle()
+				status = string(rd.Bead.Status)
+				title = rd.Bead.Title
 				if len(title) > 50 {
 					title = title[:47] + "..."
 				}
 			}
 			fmt.Fprintf(w, "%s\t%s\t%s\t%s\n",
-				rd.Dep.GetDependsOnId(),
-				rd.Dep.GetType(),
+				rd.Dep.DependsOnID,
+				string(rd.Dep.Type),
 				status,
 				title,
 			)
@@ -116,7 +114,7 @@ func runTreeFlat(beadID string, filterType string) error {
 	return nil
 }
 
-func printDepTree(deps []*beadsv1.Dependency, prefix string, remainingDepth int) {
+func printDepTree(deps []*model.Dependency, prefix string, remainingDepth int) {
 	for i, dep := range deps {
 		isLast := i == len(deps)-1
 
@@ -127,25 +125,23 @@ func printDepTree(deps []*beadsv1.Dependency, prefix string, remainingDepth int)
 			childPrefix = prefix + "    "
 		}
 
-		depResp, err := client.GetBead(context.Background(), &beadsv1.GetBeadRequest{
-			Id: dep.GetDependsOnId(),
-		})
+		depBead, err := beadsClient.GetBead(context.Background(), dep.DependsOnID)
 		if err != nil {
-			fmt.Printf("%s%s%s: %s (error fetching)\n", prefix, connector, dep.GetType(), dep.GetDependsOnId())
+			fmt.Printf("%s%s%s: %s (error fetching)\n", prefix, connector, string(dep.Type), dep.DependsOnID)
 			continue
 		}
 
-		depBead := depResp.GetBead()
+		
 		fmt.Printf("%s%s%s: %s [%s] %s\n",
 			prefix, connector,
-			dep.GetType(),
-			depBead.GetId(),
-			depBead.GetStatus(),
-			depBead.GetTitle(),
+			string(dep.Type),
+			depBead.ID,
+			string(depBead.Status),
+			depBead.Title,
 		)
 
 		if remainingDepth > 0 {
-			childDeps := depBead.GetDependencies()
+			childDeps := depBead.Dependencies
 			if len(childDeps) > 0 {
 				printDepTree(childDeps, childPrefix, remainingDepth-1)
 			}

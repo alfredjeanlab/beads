@@ -25,6 +25,7 @@ type viewConfig struct {
 	Sort    string     `json:"sort"`
 	Columns []string   `json:"columns"`
 	Limit   int        `json:"limit"`
+	Deps    *depConfig `json:"deps,omitempty"`
 }
 
 type viewFilter struct {
@@ -34,7 +35,8 @@ type viewFilter struct {
 	Labels   []string `json:"labels"`
 	Assignee string   `json:"assignee"`
 	Search   string   `json:"search"`
-	Priority *int     `json:"priority"`
+	Priority *int              `json:"priority"`
+	Fields   map[string]string `json:"fields,omitempty"`
 }
 
 var viewCmd = &cobra.Command{
@@ -92,8 +94,8 @@ var viewCmd = &cobra.Command{
 		}
 
 		// 5. Optional dependency sub-sections.
-		if !jsonOutput && vc.Deps != nil && len(listResp.GetBeads()) > 0 {
-			printViewDeps(listResp.GetBeads(), vc.Deps)
+		if !jsonOutput && vc.Deps != nil && len(resp.Beads) > 0 {
+			printViewDeps(resp.Beads, vc.Deps)
 		}
 		return nil
 	},
@@ -160,14 +162,14 @@ func beadField(b *model.Bead, col string) string {
 }
 
 // printViewDeps prints dependency sub-sections for each bead in the list.
-func printViewDeps(beads []*beadsv1.Bead, dc *depConfig) {
+func printViewDeps(beads []*model.Bead, dc *depConfig) {
 	fmt.Println()
 	for _, b := range beads {
-		deps, err := fetchAndResolveDeps(context.Background(), client, b.GetId(), dc.Types)
+		deps, err := fetchAndResolveDeps(context.Background(), beadsClient, b.ID, dc.Types)
 		if err != nil || len(deps) == 0 {
 			continue
 		}
-		fmt.Printf("  %s dependencies:\n", b.GetId())
+		fmt.Printf("  %s dependencies:\n", b.ID)
 		printDepSubSection(deps, dc.Fields)
 		fmt.Println()
 	}

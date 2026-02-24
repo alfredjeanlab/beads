@@ -107,8 +107,8 @@ var contextCmd = &cobra.Command{
 				} else {
 					printSectionTable(resp.Beads)
 				}
-				if vc.Deps != nil && len(listResp.GetBeads()) > 0 {
-					printViewDeps(listResp.GetBeads(), vc.Deps)
+				if vc.Deps != nil && len(resp.Beads) > 0 {
+					printViewDeps(resp.Beads, vc.Deps)
 				}
 			}
 		}
@@ -152,22 +152,21 @@ func printSectionTable(beads []*model.Bead) {
 }
 
 // printSectionDetail prints each bead with full show-style output.
-func printSectionDetail(beads []*beadsv1.Bead, fields []string, dc *depConfig) {
+func printSectionDetail(beads []*model.Bead, fields []string, dc *depConfig) {
 	for i, b := range beads {
 		if i > 0 {
 			fmt.Println("---")
 		}
 		// Fetch full bead (with deps + comments).
-		fullResp, err := client.GetBead(context.Background(), &beadsv1.GetBeadRequest{Id: b.GetId()})
+		fullBead, err := beadsClient.GetBead(context.Background(), b.ID)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error fetching %s: %v\n", b.GetId(), err)
+			fmt.Fprintf(os.Stderr, "Error fetching %s: %v\n", b.ID, err)
 			continue
 		}
-		full := fullResp.GetBead()
-		printBeadTableFiltered(full, fields)
-		printComments(full.GetComments())
+		printBeadTableFiltered(fullBead, fields)
+		printComments(fullBead.Comments)
 		if dc != nil {
-			resolved := resolveBeadDeps(context.Background(), client, full.GetDependencies(), dc.Types)
+			resolved := resolveBeadDeps(context.Background(), beadsClient, fullBead.Dependencies, dc.Types)
 			if len(resolved) > 0 {
 				fmt.Println()
 				fmt.Println("  Dependencies:")
@@ -178,7 +177,7 @@ func printSectionDetail(beads []*beadsv1.Bead, fields []string, dc *depConfig) {
 }
 
 // printSectionTree prints each bead with an ASCII dependency tree.
-func printSectionTree(beads []*beadsv1.Bead, depth int, dc *depConfig) {
+func printSectionTree(beads []*model.Bead, depth int, dc *depConfig) {
 	var depTypes []string
 	if dc != nil {
 		depTypes = dc.Types
@@ -188,14 +187,13 @@ func printSectionTree(beads []*beadsv1.Bead, depth int, dc *depConfig) {
 			fmt.Println()
 		}
 		// Fetch full bead for embedded deps.
-		fullResp, err := client.GetBead(context.Background(), &beadsv1.GetBeadRequest{Id: b.GetId()})
+		fullBead, err := beadsClient.GetBead(context.Background(), b.ID)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error fetching %s: %v\n", b.GetId(), err)
+			fmt.Fprintf(os.Stderr, "Error fetching %s: %v\n", b.ID, err)
 			continue
 		}
-		full := fullResp.GetBead()
-		fmt.Printf("%s [%s] %s\n", full.GetId(), full.GetStatus(), full.GetTitle())
-		deps := full.GetDependencies()
+		fmt.Printf("%s [%s] %s\n", fullBead.ID, string(fullBead.Status), fullBead.Title)
+		deps := fullBead.Dependencies
 		if len(depTypes) > 0 {
 			deps = filterDepsByType(deps, depTypes)
 		}
@@ -204,14 +202,14 @@ func printSectionTree(beads []*beadsv1.Bead, depth int, dc *depConfig) {
 }
 
 // filterDepsByType returns only dependencies whose type is in the given set.
-func filterDepsByType(deps []*beadsv1.Dependency, types []string) []*beadsv1.Dependency {
+func filterDepsByType(deps []*model.Dependency, types []string) []*model.Dependency {
 	typeSet := make(map[string]bool, len(types))
 	for _, t := range types {
 		typeSet[t] = true
 	}
-	var filtered []*beadsv1.Dependency
+	var filtered []*model.Dependency
 	for _, d := range deps {
-		if typeSet[d.GetType()] {
+		if typeSet[string(d.Type)] {
 			filtered = append(filtered, d)
 		}
 	}

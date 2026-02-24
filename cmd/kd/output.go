@@ -8,6 +8,7 @@ import (
 	"strings"
 	"text/tabwriter"
 
+	"github.com/groblegark/kbeads/internal/client"
 	"github.com/groblegark/kbeads/internal/model"
 )
 
@@ -77,24 +78,22 @@ func printBeadListTable(beads []*model.Bead, total int) {
 
 // resolvedDep pairs a dependency with its optionally-resolved target bead.
 type resolvedDep struct {
-	Dep  *beadsv1.Dependency
-	Bead *beadsv1.Bead // nil if fetch failed
+	Dep  *model.Dependency
+	Bead *model.Bead // nil if fetch failed
 }
 
 // fetchAndResolveDeps fetches dependencies for a bead and resolves each target.
 // If types is non-empty, only dependencies matching one of the given types are included.
-func fetchAndResolveDeps(ctx context.Context, c beadsv1.BeadsServiceClient, beadID string, types []string) ([]resolvedDep, error) {
-	resp, err := c.GetDependencies(ctx, &beadsv1.GetDependenciesRequest{
-		BeadId: beadID,
-	})
+func fetchAndResolveDeps(ctx context.Context, c client.BeadsClient, beadID string, types []string) ([]resolvedDep, error) {
+	deps, err := c.GetDependencies(ctx, beadID)
 	if err != nil {
 		return nil, err
 	}
-	return resolveBeadDeps(ctx, c, resp.GetDependencies(), types), nil
+	return resolveBeadDeps(ctx, c, deps, types), nil
 }
 
 // resolveBeadDeps takes an existing dependency slice, filters by type, and resolves each target bead.
-func resolveBeadDeps(ctx context.Context, c beadsv1.BeadsServiceClient, deps []*beadsv1.Dependency, types []string) []resolvedDep {
+func resolveBeadDeps(ctx context.Context, c client.BeadsClient, deps []*model.Dependency, types []string) []resolvedDep {
 	typeSet := make(map[string]bool, len(types))
 	for _, t := range types {
 		typeSet[t] = true
@@ -102,13 +101,13 @@ func resolveBeadDeps(ctx context.Context, c beadsv1.BeadsServiceClient, deps []*
 
 	var resolved []resolvedDep
 	for _, d := range deps {
-		if len(typeSet) > 0 && !typeSet[d.GetType()] {
+		if len(typeSet) > 0 && !typeSet[string(d.Type)] {
 			continue
 		}
 		rd := resolvedDep{Dep: d}
-		beadResp, err := c.GetBead(ctx, &beadsv1.GetBeadRequest{Id: d.GetDependsOnId()})
+		fetchedBead, err := c.GetBead(ctx, d.DependsOnID)
 		if err == nil {
-			rd.Bead = beadResp.GetBead()
+			rd.Bead = fetchedBead
 		}
 		resolved = append(resolved, rd)
 	}
@@ -129,16 +128,16 @@ func printDepSubSection(deps []resolvedDep, fields []string) {
 			for i, f := range fields {
 				vals[i] = beadField(rd.Bead, f)
 			}
-			fmt.Printf("    %s: %s\n", rd.Dep.GetType(), strings.Join(vals, " | "))
+			fmt.Printf("    %s: %s\n", string(rd.Dep.Type), strings.Join(vals, " | "))
 		} else {
-			fmt.Printf("    %s: %s (unresolved)\n", rd.Dep.GetType(), rd.Dep.GetDependsOnId())
+			fmt.Printf("    %s: %s (unresolved)\n", string(rd.Dep.Type), rd.Dep.DependsOnID)
 		}
 	}
 }
 
 // printBeadTableFiltered prints bead detail fields, restricted to the given whitelist.
 // If fields is nil or empty, all fields are printed (delegates to printBeadTable).
-func printBeadTableFiltered(bead *beadsv1.Bead, fields []string) {
+func printBeadTableFiltered(bead *model.Bead, fields []string) {
 	if len(fields) == 0 {
 		printBeadTable(bead)
 		return
@@ -153,40 +152,40 @@ func printBeadTableFiltered(bead *beadsv1.Bead, fields []string) {
 		value string
 	}
 	rows := []fieldRow{
-		{"ID", "id", bead.GetId()},
-		{"Slug", "slug", bead.GetSlug()},
-		{"Title", "title", bead.GetTitle()},
-		{"Type", "type", bead.GetType()},
-		{"Kind", "kind", bead.GetKind()},
-		{"Status", "status", bead.GetStatus()},
-		{"Priority", "priority", fmt.Sprintf("%d", bead.GetPriority())},
-		{"Assignee", "assignee", bead.GetAssignee()},
-		{"Owner", "owner", bead.GetOwner()},
+		{"ID", "id", bead.ID},
+		{"Slug", "slug", bead.Slug},
+		{"Title", "title", bead.Title},
+		{"Type", "type", string(bead.Type)},
+		{"Kind", "kind", string(bead.Kind)},
+		{"Status", "status", string(bead.Status)},
+		{"Priority", "priority", fmt.Sprintf("%d", bead.Priority)},
+		{"Assignee", "assignee", bead.Assignee},
+		{"Owner", "owner", bead.Owner},
 	}
 	for _, r := range rows {
 		if fieldSet[r.key] {
 			fmt.Printf("%-13s%s\n", r.label+":", r.value)
 		}
 	}
-	if fieldSet["description"] && bead.GetDescription() != "" {
-		fmt.Printf("%-13s%s\n", "Description:", bead.GetDescription())
+	if fieldSet["description"] && bead.Description != "" {
+		fmt.Printf("%-13s%s\n", "Description:", bead.Description)
 	}
-	if fieldSet["labels"] && len(bead.GetLabels()) > 0 {
-		fmt.Printf("%-13s%s\n", "Labels:", strings.Join(bead.GetLabels(), ", "))
+	if fieldSet["labels"] && len(bead.Labels) > 0 {
+		fmt.Printf("%-13s%s\n", "Labels:", strings.Join(bead.Labels, ", "))
 	}
 	if fieldSet["created_by"] {
-		fmt.Printf("%-13s%s\n", "Created By:", bead.GetCreatedBy())
+		fmt.Printf("%-13s%s\n", "Created By:", bead.CreatedBy)
 	}
-	if fieldSet["created_at"] && bead.GetCreatedAt() != nil {
-		fmt.Printf("%-13s%s\n", "Created At:", bead.GetCreatedAt().AsTime().Format("2006-01-02 15:04:05"))
+	if fieldSet["created_at"] && !bead.CreatedAt.IsZero() {
+		fmt.Printf("%-13s%s\n", "Created At:", bead.CreatedAt.Format("2006-01-02 15:04:05"))
 	}
-	if fieldSet["updated_at"] && bead.GetUpdatedAt() != nil {
-		fmt.Printf("%-13s%s\n", "Updated At:", bead.GetUpdatedAt().AsTime().Format("2006-01-02 15:04:05"))
+	if fieldSet["updated_at"] && !bead.UpdatedAt.IsZero() {
+		fmt.Printf("%-13s%s\n", "Updated At:", bead.UpdatedAt.Format("2006-01-02 15:04:05"))
 	}
 }
 
 // printComments prints bead comments in a standard format.
-func printComments(comments []*beadsv1.Comment) {
+func printComments(comments []*model.Comment) {
 	if len(comments) == 0 {
 		return
 	}
@@ -194,9 +193,9 @@ func printComments(comments []*beadsv1.Comment) {
 	fmt.Println("Comments:")
 	for _, c := range comments {
 		ts := ""
-		if c.GetCreatedAt() != nil {
-			ts = c.GetCreatedAt().AsTime().Format("2006-01-02 15:04:05")
+		if !c.CreatedAt.IsZero() {
+			ts = c.CreatedAt.Format("2006-01-02 15:04:05")
 		}
-		fmt.Printf("  [%s] %s: %s\n", ts, c.GetAuthor(), c.GetText())
+		fmt.Printf("  [%s] %s: %s\n", ts, c.Author, c.Text)
 	}
 }

@@ -137,7 +137,8 @@ type ListBeadsRequest struct {
 	Sort     string   `json:"sort,omitempty"`
 	Priority *int     `json:"priority,omitempty"`
 	Limit    int      `json:"limit,omitempty"`
-	Offset   int      `json:"offset,omitempty"`
+	Offset       int               `json:"offset,omitempty"`
+	FieldFilters map[string]string `json:"field_filters,omitempty"`
 }
 
 // ListBeadsResponse is the response from ListBeads.

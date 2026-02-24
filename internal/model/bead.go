@@ -81,6 +81,7 @@ const (
 	StatusInProgress Status = "in_progress"
 	StatusDeferred   Status = "deferred"
 	StatusClosed     Status = "closed"
+	StatusBlocked    Status = "blocked"
 )
 
 // String returns the string representation of the status.
@@ -91,7 +92,7 @@ func (s Status) String() string {
 // IsValid checks whether the status is a known value.
 func (s Status) IsValid() bool {
 	switch s {
-	case StatusOpen, StatusInProgress, StatusDeferred, StatusClosed:
+	case StatusOpen, StatusInProgress, StatusDeferred, StatusClosed, StatusBlocked:
 		return true
 	}
 	return false
