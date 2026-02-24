@@ -57,6 +57,20 @@ var builtinConfigs = map[string]*model.Config{
 			{"name": "jack_rig",             "type": "string"}
 		]
 	}`)},
+	"type:decision": {Key: "type:decision", Value: json.RawMessage(`{
+		"kind": "data",
+		"fields": [
+			{"name": "prompt",                  "type": "string", "required": true},
+			{"name": "options",                 "type": "json"},
+			{"name": "context",                 "type": "string"},
+			{"name": "requested_by",            "type": "string"},
+			{"name": "requesting_agent_bead_id","type": "string"},
+			{"name": "chosen",                  "type": "string"},
+			{"name": "response_text",           "type": "string"},
+			{"name": "responded_by",            "type": "string"},
+			{"name": "responded_at",            "type": "string"}
+		]
+	}`)},
 }
 
 var builtinConfigsByNamespace = func() map[string][]*model.Config {
