@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/spf13/cobra"
 )
@@ -30,6 +31,11 @@ Merge rules:
   - Top-level keys: more specific layer wins (replace)
   - hooks.<hookType> arrays: append (more specific adds to existing)
 
+Flags:
+  --defaults   Install hardcoded default hooks (no server needed)
+  --check      Verify hooks are installed, exit 1 if missing
+  --remove     Remove kd hooks from settings.json
+
 Environment variables used:
   BOAT_ROLE / KD_ROLE  — agent role for role-specific config lookup
   KD_WORKSPACE         — workspace directory (default: current directory)`,
@@ -47,6 +53,21 @@ Environment variables used:
 			role = os.Getenv("KD_ROLE")
 		}
 
+		check, _ := cmd.Flags().GetBool("check")
+		if check {
+			return runSetupClaudeCheck(workspace)
+		}
+
+		remove, _ := cmd.Flags().GetBool("remove")
+		if remove {
+			return runSetupClaudeRemove(workspace)
+		}
+
+		defaults, _ := cmd.Flags().GetBool("defaults")
+		if defaults {
+			return runSetupClaudeDefaults(workspace)
+		}
+
 		return runSetupClaude(cmd.Context(), workspace, role)
 	},
 }
@@ -54,7 +75,203 @@ Environment variables used:
 func init() {
 	setupClaudeCmd.Flags().String("workspace", os.Getenv("KD_WORKSPACE"), "workspace directory")
 	setupClaudeCmd.Flags().String("role", "", "agent role (default: $BOAT_ROLE or $KD_ROLE)")
+	setupClaudeCmd.Flags().Bool("defaults", false, "install hardcoded default hooks (no server needed)")
+	setupClaudeCmd.Flags().Bool("check", false, "verify hooks are installed (exit 1 if missing)")
+	setupClaudeCmd.Flags().Bool("remove", false, "remove kd hooks from settings.json")
 	setupCmd.AddCommand(setupClaudeCmd)
+}
+
+// kdHookCommand is the command prefix for kd bus emit hooks.
+const kdHookCommand = "kd bus emit --hook="
+
+// defaultHookSettings returns the default Claude Code settings with kd hooks.
+func defaultHookSettings() map[string]any {
+	hookTypes := []string{"SessionStart", "PreCompact", "Stop", "PreToolUse", "PostToolUse"}
+	hooks := make(map[string]any, len(hookTypes))
+	for _, ht := range hookTypes {
+		hooks[ht] = []any{
+			map[string]any{
+				"matcher": "",
+				"hooks": []any{
+					map[string]any{
+						"type":    "command",
+						"command": kdHookCommand + ht,
+					},
+				},
+			},
+		}
+	}
+	return map[string]any{
+		"hooks": hooks,
+	}
+}
+
+// runSetupClaudeDefaults writes hardcoded default hooks without contacting the server.
+func runSetupClaudeDefaults(workspace string) error {
+	settings := defaultHookSettings()
+
+	outDir := filepath.Join(workspace, ".claude")
+	if err := os.MkdirAll(outDir, 0755); err != nil {
+		return fmt.Errorf("creating .claude dir: %w", err)
+	}
+
+	outPath := filepath.Join(outDir, "settings.json")
+	data, err := json.MarshalIndent(settings, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshalling settings: %w", err)
+	}
+	data = append(data, '\n')
+
+	if err := os.WriteFile(outPath, data, 0600); err != nil {
+		return fmt.Errorf("writing settings: %w", err)
+	}
+
+	fmt.Fprintf(os.Stderr, "[setup] wrote default hooks to %s\n", outPath)
+	return nil
+}
+
+// runSetupClaudeCheck verifies that kd hooks are installed.
+// Exits with code 1 if missing.
+func runSetupClaudeCheck(workspace string) error {
+	settingsPath := filepath.Join(workspace, ".claude", "settings.json")
+	data, err := os.ReadFile(settingsPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "hooks not installed: %s not found\n", settingsPath)
+		os.Exit(1)
+	}
+
+	var settings map[string]any
+	if err := json.Unmarshal(data, &settings); err != nil {
+		fmt.Fprintf(os.Stderr, "hooks not installed: invalid JSON in %s\n", settingsPath)
+		os.Exit(1)
+	}
+
+	hooks, ok := settings["hooks"].(map[string]any)
+	if !ok {
+		fmt.Fprintf(os.Stderr, "hooks not installed: no hooks key in %s\n", settingsPath)
+		os.Exit(1)
+	}
+
+	required := []string{"SessionStart", "Stop"}
+	for _, ht := range required {
+		if !hookContainsKD(hooks, ht) {
+			fmt.Fprintf(os.Stderr, "hooks not installed: missing %s hook with kd command\n", ht)
+			os.Exit(1)
+		}
+	}
+
+	fmt.Fprintf(os.Stderr, "hooks OK: kd hooks installed in %s\n", settingsPath)
+	return nil
+}
+
+// hookContainsKD checks if any hook entry for the given type contains a kd bus emit command.
+func hookContainsKD(hooks map[string]any, hookType string) bool {
+	arr, ok := hooks[hookType].([]any)
+	if !ok {
+		return false
+	}
+	for _, entry := range arr {
+		entryMap, ok := entry.(map[string]any)
+		if !ok {
+			continue
+		}
+		innerHooks, ok := entryMap["hooks"].([]any)
+		if !ok {
+			continue
+		}
+		for _, h := range innerHooks {
+			hMap, ok := h.(map[string]any)
+			if !ok {
+				continue
+			}
+			cmd, _ := hMap["command"].(string)
+			if strings.HasPrefix(cmd, kdHookCommand) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// runSetupClaudeRemove removes kd hooks from settings.json.
+func runSetupClaudeRemove(workspace string) error {
+	settingsPath := filepath.Join(workspace, ".claude", "settings.json")
+	data, err := os.ReadFile(settingsPath)
+	if err != nil {
+		return fmt.Errorf("no settings file: %w", err)
+	}
+
+	var settings map[string]any
+	if err := json.Unmarshal(data, &settings); err != nil {
+		return fmt.Errorf("invalid JSON: %w", err)
+	}
+
+	hooks, ok := settings["hooks"].(map[string]any)
+	if !ok {
+		fmt.Fprintf(os.Stderr, "[setup] no hooks to remove\n")
+		return nil
+	}
+
+	removed := 0
+	for hookType, val := range hooks {
+		arr, ok := val.([]any)
+		if !ok {
+			continue
+		}
+		var filtered []any
+		for _, entry := range arr {
+			entryMap, ok := entry.(map[string]any)
+			if !ok {
+				filtered = append(filtered, entry)
+				continue
+			}
+			innerHooks, ok := entryMap["hooks"].([]any)
+			if !ok {
+				filtered = append(filtered, entry)
+				continue
+			}
+			hasKD := false
+			for _, h := range innerHooks {
+				hMap, ok := h.(map[string]any)
+				if !ok {
+					continue
+				}
+				cmd, _ := hMap["command"].(string)
+				if strings.HasPrefix(cmd, kdHookCommand) {
+					hasKD = true
+					break
+				}
+			}
+			if !hasKD {
+				filtered = append(filtered, entry)
+			} else {
+				removed++
+			}
+		}
+		if len(filtered) == 0 {
+			delete(hooks, hookType)
+		} else {
+			hooks[hookType] = filtered
+		}
+	}
+
+	if removed == 0 {
+		fmt.Fprintf(os.Stderr, "[setup] no kd hooks found to remove\n")
+		return nil
+	}
+
+	out, err := json.MarshalIndent(settings, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshalling: %w", err)
+	}
+	out = append(out, '\n')
+
+	if err := os.WriteFile(settingsPath, out, 0600); err != nil {
+		return fmt.Errorf("writing: %w", err)
+	}
+
+	fmt.Fprintf(os.Stderr, "[setup] removed %d kd hook(s) from %s\n", removed, settingsPath)
+	return nil
 }
 
 func runSetupClaude(ctx context.Context, workspace, role string) error {
