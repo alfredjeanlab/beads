@@ -18,7 +18,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
-	"strings" // used in containerName, localAgentEnv
+	"strings"
 	"syscall"
 	"time"
 
@@ -138,10 +138,16 @@ func runLocal(ctx context.Context, agentName, agentBeadID, role, dir, agentComma
 	coopURL := fmt.Sprintf("http://127.0.0.1:%d", coopPort)
 	fmt.Printf("[kd agent start] Starting coop on port %d...\n", coopPort)
 
-	// Write workspace .claude/settings.json with kd-based hooks so claude
-	// uses kd bus emit (talking to kbeads) rather than bd bus emit (beads/gastown).
-	if err := writeAgentSettings(dir); err != nil {
-		fmt.Fprintf(os.Stderr, "[kd agent start] warning: could not write .claude/settings.json: %v\n", err)
+	// Materialize workspace .claude/settings.json via kd setup claude.
+	// This fetches claude-hooks config beads from the server (same as K8s agents),
+	// writing kd-based hooks so claude uses kd bus emit instead of bd bus emit.
+	// Falls back to --defaults if no config beads are configured on the server.
+	fmt.Printf("[kd agent start] Materializing hooks (kd setup claude)...\n")
+	if err := runSetupClaude(ctx, dir, role); err != nil {
+		fmt.Fprintf(os.Stderr, "[kd agent start] config beads not found, installing defaults...\n")
+		if err2 := runSetupClaudeDefaults(dir); err2 != nil {
+			fmt.Fprintf(os.Stderr, "[kd agent start] warning: could not write .claude/settings.json: %v\n", err2)
+		}
 	}
 
 	// Build env for the coop+claude subprocess.
@@ -336,35 +342,6 @@ func runDocker(ctx context.Context, agentName, agentBeadID, role, dir, imageDir,
 
 // ── helpers ───────────────────────────────────────────────────────────────
 
-// writeAgentSettings writes a workspace .claude/settings.json that overrides
-// the user-level hooks to use 'kd bus emit' instead of 'bd bus emit'.
-// Claude Code merges workspace settings over user settings, so this wins.
-func writeAgentSettings(dir string) error {
-	claudeDir := filepath.Join(dir, ".claude")
-	if err := os.MkdirAll(claudeDir, 0o755); err != nil {
-		return err
-	}
-	settingsPath := filepath.Join(claudeDir, "settings.json")
-
-	// Only write if the file doesn't exist or doesn't already use kd.
-	if data, err := os.ReadFile(settingsPath); err == nil {
-		if strings.Contains(string(data), "kd bus emit") {
-			return nil // already configured
-		}
-	}
-
-	const settings = `{
-  "hooks": {
-    "SessionStart": [{"matcher":"","hooks":[{"type":"command","command":"kd bus emit --hook=SessionStart"}]}],
-    "Stop":         [{"matcher":"","hooks":[{"type":"command","command":"kd bus emit --hook=Stop"}]}],
-    "PreToolUse":   [{"matcher":"","hooks":[{"type":"command","command":"kd bus emit --hook=PreToolUse"}]}],
-    "PostToolUse":  [{"matcher":"","hooks":[{"type":"command","command":"kd bus emit --hook=PostToolUse"}]}],
-    "PreCompact":   [{"matcher":"","hooks":[{"type":"command","command":"kd bus emit --hook=PreCompact"}]}]
-  }
-}
-`
-	return os.WriteFile(settingsPath, []byte(settings), 0o644)
-}
 
 // localAgentEnv builds the environment slice for a --local coop subprocess.
 func localAgentEnv(agentName, agentBeadID, role, dir, coopAddr string) []string {
