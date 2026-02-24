@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 	"time"
 
 	"github.com/groblegark/kbeads/internal/client"
@@ -22,33 +21,27 @@ var jackExtendCmd = &cobra.Command{
 		reason, _ := cmd.Flags().GetString("reason")
 
 		if ttlStr == "" {
-			fmt.Fprintln(os.Stderr, "Error: --ttl is required")
-			os.Exit(1)
+			return fmt.Errorf("--ttl is required")
 		}
 
 		ttl, err := time.ParseDuration(ttlStr)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: invalid TTL %q: %v\n", ttlStr, err)
-			os.Exit(1)
+			return fmt.Errorf("invalid TTL %q: %w", ttlStr, err)
 		}
 		if ttl > model.JackMaxSingleExtension {
-			fmt.Fprintf(os.Stderr, "Error: single extension %v exceeds maximum %v\n", ttl, model.JackMaxSingleExtension)
-			os.Exit(1)
+			return fmt.Errorf("single extension %v exceeds maximum %v", ttl, model.JackMaxSingleExtension)
 		}
 
 		// Fetch current jack.
 		bead, err := beadsClient.GetBead(context.Background(), id)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
+			return fmt.Errorf("getting jack %s: %w", id, err)
 		}
 		if string(bead.Type) != "jack" {
-			fmt.Fprintf(os.Stderr, "Error: %s is not a jack\n", id)
-			os.Exit(1)
+			return fmt.Errorf("%s is not a jack", id)
 		}
 		if string(bead.Status) == "closed" {
-			fmt.Fprintf(os.Stderr, "Error: jack %s is already closed\n", id)
-			os.Exit(1)
+			return fmt.Errorf("jack %s is already closed", id)
 		}
 
 		var fields map[string]any
@@ -65,8 +58,7 @@ var jackExtendCmd = &cobra.Command{
 			extCount = int(v)
 		}
 		if extCount >= model.JackMaxExtensions {
-			fmt.Fprintf(os.Stderr, "Error: jack has reached maximum %d extensions\n", model.JackMaxExtensions)
-			os.Exit(1)
+			return fmt.Errorf("jack has reached maximum %d extensions", model.JackMaxExtensions)
 		}
 
 		// Check cumulative TTL.
@@ -75,9 +67,8 @@ var jackExtendCmd = &cobra.Command{
 			cumulativeTTL, _ = time.ParseDuration(v)
 		}
 		if cumulativeTTL+ttl > model.JackMaxCumulativeTTL {
-			fmt.Fprintf(os.Stderr, "Error: cumulative TTL %v + %v exceeds maximum %v\n",
+			return fmt.Errorf("cumulative TTL %v + %v exceeds maximum %v",
 				cumulativeTTL, ttl, model.JackMaxCumulativeTTL)
-			os.Exit(1)
 		}
 
 		// Save original TTL on first extension.
@@ -99,8 +90,7 @@ var jackExtendCmd = &cobra.Command{
 			Fields: fieldsJSON,
 		})
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
+			return fmt.Errorf("updating jack %s: %w", id, err)
 		}
 
 		// Add comment recording extension.

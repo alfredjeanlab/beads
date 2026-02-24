@@ -32,8 +32,7 @@ var jackListCmd = &cobra.Command{
 			Limit:  100,
 		})
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
+			return fmt.Errorf("listing jacks: %w", err)
 		}
 
 		if jsonOutput {

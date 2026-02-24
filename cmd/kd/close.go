@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"os"
 
 	"github.com/spf13/cobra"
 )
@@ -17,8 +16,7 @@ var closeCmd = &cobra.Command{
 		for _, id := range args {
 			bead, err := beadsClient.CloseBead(context.Background(), id, actor)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error closing %s: %v\n", id, err)
-				os.Exit(1)
+				return fmt.Errorf("closing %s: %w", id, err)
 			}
 
 			if jsonOutput {

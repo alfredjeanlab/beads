@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"os"
 	"time"
 
 	"github.com/groblegark/kbeads/internal/client"
@@ -23,8 +22,7 @@ var deferCmd = &cobra.Command{
 		if until != "" {
 			t, err := time.Parse(time.RFC3339, until)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error parsing --until: %v\n", err)
-				os.Exit(1)
+				return fmt.Errorf("parsing --until: %w", err)
 			}
 			deferUntil = &t
 		}
@@ -37,8 +35,7 @@ var deferCmd = &cobra.Command{
 			}
 			bead, err := beadsClient.UpdateBead(ctx, id, req)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error deferring %s: %v\n", id, err)
-				os.Exit(1)
+				return fmt.Errorf("deferring %s: %w", id, err)
 			}
 			if jsonOutput {
 				printBeadJSON(bead)
@@ -70,8 +67,7 @@ var undeferCmd = &cobra.Command{
 			}
 			bead, err := beadsClient.UpdateBead(ctx, id, req)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error undeferring %s: %v\n", id, err)
-				os.Exit(1)
+				return fmt.Errorf("undeferring %s: %w", id, err)
 			}
 			if jsonOutput {
 				printBeadJSON(bead)

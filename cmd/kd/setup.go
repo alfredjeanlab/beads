@@ -131,32 +131,28 @@ func runSetupClaudeDefaults(workspace string) error {
 }
 
 // runSetupClaudeCheck verifies that kd hooks are installed.
-// Exits with code 1 if missing.
+// Returns an error if missing.
 func runSetupClaudeCheck(workspace string) error {
 	settingsPath := filepath.Join(workspace, ".claude", "settings.json")
 	data, err := os.ReadFile(settingsPath)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "hooks not installed: %s not found\n", settingsPath)
-		os.Exit(1)
+		return fmt.Errorf("hooks not installed: %s not found", settingsPath)
 	}
 
 	var settings map[string]any
 	if err := json.Unmarshal(data, &settings); err != nil {
-		fmt.Fprintf(os.Stderr, "hooks not installed: invalid JSON in %s\n", settingsPath)
-		os.Exit(1)
+		return fmt.Errorf("hooks not installed: invalid JSON in %s", settingsPath)
 	}
 
 	hooks, ok := settings["hooks"].(map[string]any)
 	if !ok {
-		fmt.Fprintf(os.Stderr, "hooks not installed: no hooks key in %s\n", settingsPath)
-		os.Exit(1)
+		return fmt.Errorf("hooks not installed: no hooks key in %s", settingsPath)
 	}
 
 	required := []string{"SessionStart", "Stop"}
 	for _, ht := range required {
 		if !hookContainsKD(hooks, ht) {
-			fmt.Fprintf(os.Stderr, "hooks not installed: missing %s hook with kd command\n", ht)
-			os.Exit(1)
+			return fmt.Errorf("hooks not installed: missing %s hook with kd command", ht)
 		}
 	}
 

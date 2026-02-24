@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 	"time"
 
 	"github.com/groblegark/kbeads/internal/client"
@@ -21,24 +20,20 @@ var jackDownCmd = &cobra.Command{
 		skipRevert, _ := cmd.Flags().GetBool("skip-revert-check")
 
 		if reason == "" {
-			fmt.Fprintln(os.Stderr, "Error: --reason is required")
-			os.Exit(1)
+			return fmt.Errorf("--reason is required")
 		}
 		if skipRevert && len(reason) < 10 {
-			fmt.Fprintln(os.Stderr, "Error: --skip-revert-check requires a reason of at least 10 characters")
-			os.Exit(1)
+			return fmt.Errorf("--skip-revert-check requires a reason of at least 10 characters")
 		}
 
 		// Fetch current bead to get existing fields.
 		bead, err := beadsClient.GetBead(context.Background(), id)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
+			return fmt.Errorf("getting jack %s: %w", id, err)
 		}
 
 		if string(bead.Type) != "jack" {
-			fmt.Fprintf(os.Stderr, "Error: %s is not a jack (type=%s)\n", id, bead.Type)
-			os.Exit(1)
+			return fmt.Errorf("%s is not a jack (type=%s)", id, bead.Type)
 		}
 
 		// Merge new fields into existing fields.
@@ -60,14 +55,12 @@ var jackDownCmd = &cobra.Command{
 			Fields: fieldsJSON,
 		})
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error updating fields: %v\n", err)
-			os.Exit(1)
+			return fmt.Errorf("updating jack fields: %w", err)
 		}
 
 		_, err = beadsClient.CloseBead(context.Background(), id, actor)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error closing jack: %v\n", err)
-			os.Exit(1)
+			return fmt.Errorf("closing jack %s: %w", id, err)
 		}
 
 		if jsonOutput {

@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -19,8 +18,7 @@ var adviceShowCmd = &cobra.Command{
 
 		bead, err := beadsClient.GetBead(context.Background(), id)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
+			return fmt.Errorf("getting advice %s: %w", id, err)
 		}
 
 		if jsonOutput {

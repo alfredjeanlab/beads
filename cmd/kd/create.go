@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"os"
 
 	"github.com/groblegark/kbeads/internal/client"
 	"github.com/spf13/cobra"
@@ -50,8 +49,7 @@ var createCmd = &cobra.Command{
 		fieldPairs, _ := cmd.Flags().GetStringArray("field")
 		fieldsJSON, err := parseFields(fieldPairs)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
+			return fmt.Errorf("parsing fields: %w", err)
 		}
 
 		req := &client.CreateBeadRequest{
@@ -69,8 +67,7 @@ var createCmd = &cobra.Command{
 
 		bead, err := beadsClient.CreateBead(context.Background(), req)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
+			return fmt.Errorf("creating bead: %w", err)
 		}
 
 		if jsonOutput {

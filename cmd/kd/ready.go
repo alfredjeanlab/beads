@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"os"
 
 	"github.com/groblegark/kbeads/internal/client"
 	"github.com/spf13/cobra"
@@ -29,8 +28,7 @@ var readyCmd = &cobra.Command{
 
 		resp, err := beadsClient.ListBeads(context.Background(), req)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
+			return fmt.Errorf("listing ready beads: %w", err)
 		}
 
 		if jsonOutput {

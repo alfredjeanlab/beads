@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 
 	"github.com/groblegark/kbeads/internal/model"
 	"github.com/spf13/cobra"
@@ -27,14 +26,12 @@ var configCreateCmd = &cobra.Command{
 
 		// Validate that value is valid JSON.
 		if !json.Valid(value) {
-			fmt.Fprintln(os.Stderr, "Error: value must be valid JSON")
-			os.Exit(1)
+			return fmt.Errorf("value must be valid JSON")
 		}
 
 		config, err := beadsClient.SetConfig(context.Background(), key, value)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
+			return fmt.Errorf("setting config %q: %w", key, err)
 		}
 
 		printConfigJSON(config)
@@ -49,8 +46,7 @@ var configGetCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		config, err := beadsClient.GetConfig(context.Background(), args[0])
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
+			return fmt.Errorf("getting config %q: %w", args[0], err)
 		}
 
 		printConfigJSON(config)
@@ -68,14 +64,12 @@ var configListCmd = &cobra.Command{
 			namespace = args[0]
 		}
 		if namespace == "" {
-			fmt.Fprintln(os.Stderr, "Error: namespace argument is required")
-			os.Exit(1)
+			return fmt.Errorf("namespace argument is required")
 		}
 
 		configs, err := beadsClient.ListConfigs(context.Background(), namespace)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
+			return fmt.Errorf("listing configs in %q: %w", namespace, err)
 		}
 
 		for _, c := range configs {
@@ -94,8 +88,7 @@ var configDeleteCmd = &cobra.Command{
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if err := beadsClient.DeleteConfig(context.Background(), args[0]); err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
+			return fmt.Errorf("deleting config %q: %w", args[0], err)
 		}
 
 		fmt.Printf("Deleted config %q\n", args[0])

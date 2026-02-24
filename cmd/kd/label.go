@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"os"
 
 	"github.com/spf13/cobra"
 )
@@ -25,8 +24,7 @@ var labelAddCmd = &cobra.Command{
 		for _, label := range labels {
 			_, err := beadsClient.AddLabel(context.Background(), beadID, label)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error adding label %q: %v\n", label, err)
-				os.Exit(1)
+				return fmt.Errorf("adding label %q: %w", label, err)
 			}
 		}
 
@@ -45,8 +43,7 @@ var labelRemoveCmd = &cobra.Command{
 
 		for _, label := range labels {
 			if err := beadsClient.RemoveLabel(context.Background(), beadID, label); err != nil {
-				fmt.Fprintf(os.Stderr, "Error removing label %q: %v\n", label, err)
-				os.Exit(1)
+				return fmt.Errorf("removing label %q: %w", label, err)
 			}
 		}
 

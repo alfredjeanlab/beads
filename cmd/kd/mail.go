@@ -59,8 +59,7 @@ var mailSendCmd = &cobra.Command{
 
 		bead, err := beadsClient.CreateBead(context.Background(), req)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
+			return fmt.Errorf("sending mail: %w", err)
 		}
 
 		if jsonOutput {
@@ -88,8 +87,7 @@ func runInbox(cmd *cobra.Command, args []string) error {
 
 	resp, err := beadsClient.ListBeads(context.Background(), req)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("listing inbox: %w", err)
 	}
 
 	if jsonOutput {
@@ -126,8 +124,7 @@ var mailReadCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		bead, err := beadsClient.GetBead(context.Background(), args[0])
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
+			return fmt.Errorf("reading mail %s: %w", args[0], err)
 		}
 
 		if jsonOutput {
@@ -163,8 +160,7 @@ var mailListCmd = &cobra.Command{
 
 		resp, err := beadsClient.ListBeads(context.Background(), req)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
+			return fmt.Errorf("listing mail: %w", err)
 		}
 
 		if jsonOutput {

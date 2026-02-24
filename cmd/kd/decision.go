@@ -120,8 +120,7 @@ var decisionCreateCmd = &cobra.Command{
 
 		bead, err := beadsClient.CreateBead(context.Background(), req)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
+			return fmt.Errorf("creating decision: %w", err)
 		}
 
 		// Publish NATS event after successful creation.
@@ -174,8 +173,7 @@ var decisionListCmd = &cobra.Command{
 
 		resp, err := beadsClient.ListBeads(context.Background(), req)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
+			return fmt.Errorf("listing decisions: %w", err)
 		}
 
 		if jsonOutput {
@@ -201,8 +199,7 @@ var decisionShowCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		bead, err := beadsClient.GetBead(context.Background(), args[0])
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
+			return fmt.Errorf("getting decision %s: %w", args[0], err)
 		}
 
 		if jsonOutput {
@@ -250,15 +247,13 @@ var decisionRespondCmd = &cobra.Command{
 			Fields: fieldsJSON,
 		})
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error updating decision: %v\n", err)
-			os.Exit(1)
+			return fmt.Errorf("updating decision %s: %w", id, err)
 		}
 
 		// Close the decision bead.
 		bead, err := beadsClient.CloseBead(context.Background(), id, actor)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error closing decision: %v\n", err)
-			os.Exit(1)
+			return fmt.Errorf("closing decision %s: %w", id, err)
 		}
 
 		// Publish NATS event after successful close.

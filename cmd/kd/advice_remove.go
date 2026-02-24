@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"os"
 
 	"github.com/spf13/cobra"
 )
@@ -19,15 +18,13 @@ var adviceRemoveCmd = &cobra.Command{
 		hard, _ := cmd.Flags().GetBool("hard")
 		if hard {
 			if err := beadsClient.DeleteBead(context.Background(), id); err != nil {
-				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-				os.Exit(1)
+				return fmt.Errorf("deleting advice %s: %w", id, err)
 			}
 			fmt.Printf("Deleted advice %s\n", id)
 		} else {
 			bead, err := beadsClient.CloseBead(context.Background(), id, actor)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-				os.Exit(1)
+				return fmt.Errorf("closing advice %s: %w", id, err)
 			}
 			fmt.Printf("Closed advice %s: %s\n", bead.ID, bead.Title)
 		}

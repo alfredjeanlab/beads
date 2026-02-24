@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 	"time"
 
 	"github.com/groblegark/kbeads/internal/client"
@@ -24,8 +23,7 @@ var jackCheckCmd = &cobra.Command{
 			Limit:  100,
 		})
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
+			return fmt.Errorf("listing jacks: %w", err)
 		}
 
 		now := time.Now().UTC()

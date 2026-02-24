@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 	"strings"
 	"time"
 
@@ -20,8 +19,7 @@ var jackShowCmd = &cobra.Command{
 
 		bead, err := beadsClient.GetBead(context.Background(), id)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
+			return fmt.Errorf("getting jack %s: %w", id, err)
 		}
 
 		if jsonOutput {

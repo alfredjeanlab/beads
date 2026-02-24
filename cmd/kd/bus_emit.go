@@ -98,7 +98,7 @@ Block reason is written to stderr as {"decision":"block","reason":"..."}.`,
 		if err != nil {
 			// On server error, allow (fail open) — don't block the agent.
 			fmt.Fprintf(os.Stderr, "kd bus emit: server error (failing open): %v\n", err)
-			os.Exit(0)
+			return nil
 		}
 
 		// On SessionStart, inject the full kd prime context.
@@ -120,6 +120,8 @@ Block reason is written to stderr as {"decision":"block","reason":"..."}.`,
 		}
 
 		// Block: write to stderr and exit 2.
+		// Exit code 2 is required by the Claude Code hook protocol to signal "block".
+		// Cobra cannot express non-1 exit codes via error returns.
 		if resp.Block {
 			blockJSON, _ := json.Marshal(map[string]string{
 				"decision": "block",

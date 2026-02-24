@@ -33,15 +33,13 @@ var depAddCmd = &cobra.Command{
 			CreatedBy:   actor,
 		})
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
+			return fmt.Errorf("adding dependency: %w", err)
 		}
 
 		if jsonOutput {
 			data, err := json.MarshalIndent(dep, "", "  ")
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error marshaling JSON: %v\n", err)
-				os.Exit(1)
+				return fmt.Errorf("marshaling JSON: %w", err)
 			}
 			fmt.Println(string(data))
 		} else {
@@ -67,8 +65,7 @@ var depRemoveCmd = &cobra.Command{
 		depType, _ := cmd.Flags().GetString("type")
 
 		if err := beadsClient.RemoveDependency(context.Background(), beadID, dependsOnID, depType); err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
+			return fmt.Errorf("removing dependency: %w", err)
 		}
 
 		fmt.Println("Removed dependency")
@@ -85,15 +82,13 @@ var depListCmd = &cobra.Command{
 
 		deps, err := beadsClient.GetDependencies(context.Background(), beadID)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
+			return fmt.Errorf("listing dependencies: %w", err)
 		}
 
 		if jsonOutput {
 			data, err := json.MarshalIndent(deps, "", "  ")
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error marshaling JSON: %v\n", err)
-				os.Exit(1)
+				return fmt.Errorf("marshaling JSON: %w", err)
 			}
 			fmt.Println(string(data))
 		} else {

@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"os"
 
 	"github.com/spf13/cobra"
 )
@@ -18,8 +17,7 @@ var showCmd = &cobra.Command{
 
 		bead, err := beadsClient.GetBead(context.Background(), id)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
+			return fmt.Errorf("getting bead %s: %w", id, err)
 		}
 
 		if jsonOutput {

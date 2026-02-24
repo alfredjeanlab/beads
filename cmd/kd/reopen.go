@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"os"
 
 	"github.com/groblegark/kbeads/internal/client"
 	"github.com/spf13/cobra"
@@ -21,8 +20,7 @@ var reopenCmd = &cobra.Command{
 				Status: &open,
 			})
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error reopening %s: %v\n", id, err)
-				os.Exit(1)
+				return fmt.Errorf("reopening %s: %w", id, err)
 			}
 
 			if jsonOutput {

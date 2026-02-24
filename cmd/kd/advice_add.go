@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 
 	"github.com/groblegark/kbeads/internal/client"
 	"github.com/spf13/cobra"
@@ -83,8 +82,7 @@ Examples:
 		if len(fields) > 0 {
 			b, err := json.Marshal(fields)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error encoding fields: %v\n", err)
-				os.Exit(1)
+				return fmt.Errorf("encoding fields: %w", err)
 			}
 			fieldsJSON = b
 		}
@@ -108,8 +106,7 @@ Examples:
 
 		bead, err := beadsClient.CreateBead(context.Background(), req)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
+			return fmt.Errorf("creating advice: %w", err)
 		}
 
 		if jsonOutput {

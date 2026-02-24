@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -26,15 +25,13 @@ var commentAddCmd = &cobra.Command{
 
 		c, err := beadsClient.AddComment(context.Background(), beadID, actor, text)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
+			return fmt.Errorf("adding comment: %w", err)
 		}
 
 		if jsonOutput {
 			data, err := json.MarshalIndent(c, "", "  ")
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error marshaling JSON: %v\n", err)
-				os.Exit(1)
+				return fmt.Errorf("marshaling JSON: %w", err)
 			}
 			fmt.Println(string(data))
 		} else {
@@ -59,15 +56,13 @@ var commentListCmd = &cobra.Command{
 
 		comments, err := beadsClient.GetComments(context.Background(), beadID)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
+			return fmt.Errorf("listing comments: %w", err)
 		}
 
 		if jsonOutput {
 			data, err := json.MarshalIndent(comments, "", "  ")
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error marshaling JSON: %v\n", err)
-				os.Exit(1)
+				return fmt.Errorf("marshaling JSON: %w", err)
 			}
 			fmt.Println(string(data))
 		} else {

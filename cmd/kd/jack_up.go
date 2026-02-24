@@ -33,22 +33,18 @@ Examples:
 		priority, _ := cmd.Flags().GetInt("priority")
 
 		if reason == "" {
-			fmt.Fprintln(os.Stderr, "Error: --reason is required")
-			os.Exit(1)
+			return fmt.Errorf("--reason is required")
 		}
 		if revertPlan == "" {
-			fmt.Fprintln(os.Stderr, "Error: --revert-plan is required")
-			os.Exit(1)
+			return fmt.Errorf("--revert-plan is required")
 		}
 
 		ttl, err := time.ParseDuration(ttlStr)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: invalid TTL %q: %v\n", ttlStr, err)
-			os.Exit(1)
+			return fmt.Errorf("invalid TTL %q: %w", ttlStr, err)
 		}
 		if ttl > model.JackMaxTTL {
-			fmt.Fprintf(os.Stderr, "Error: TTL %v exceeds maximum %v\n", ttl, model.JackMaxTTL)
-			os.Exit(1)
+			return fmt.Errorf("TTL %v exceeds maximum %v", ttl, model.JackMaxTTL)
 		}
 
 		// Ensure at least one jack: label.
@@ -81,8 +77,7 @@ Examples:
 
 		fieldsJSON, err := json.Marshal(fields)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error encoding fields: %v\n", err)
-			os.Exit(1)
+			return fmt.Errorf("encoding fields: %w", err)
 		}
 
 		title := fmt.Sprintf("Jack: %s", target)
@@ -100,8 +95,7 @@ Examples:
 
 		bead, err := beadsClient.CreateBead(context.Background(), req)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
+			return fmt.Errorf("creating jack: %w", err)
 		}
 
 		// Set status to in_progress (jacks start active).

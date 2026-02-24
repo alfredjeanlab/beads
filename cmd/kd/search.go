@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/groblegark/kbeads/internal/client"
@@ -32,8 +31,7 @@ var searchCmd = &cobra.Command{
 
 		resp, err := beadsClient.ListBeads(context.Background(), req)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
+			return fmt.Errorf("searching beads: %w", err)
 		}
 
 		if jsonOutput {

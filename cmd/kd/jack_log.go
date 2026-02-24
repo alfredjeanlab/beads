@@ -25,12 +25,10 @@ var jackLogCmd = &cobra.Command{
 		cmdStr, _ := cmd.Flags().GetString("cmd")
 
 		if action == "" {
-			fmt.Fprintln(os.Stderr, "Error: --action is required")
-			os.Exit(1)
+			return fmt.Errorf("--action is required")
 		}
 		if !model.IsValidJackAction(action) {
-			fmt.Fprintf(os.Stderr, "Error: invalid action %q (must be one of %v)\n", action, model.ValidJackActions)
-			os.Exit(1)
+			return fmt.Errorf("invalid action %q (must be one of %v)", action, model.ValidJackActions)
 		}
 
 		// Truncate oversized fields.
@@ -44,16 +42,13 @@ var jackLogCmd = &cobra.Command{
 		// Fetch current jack.
 		bead, err := beadsClient.GetBead(context.Background(), id)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
+			return fmt.Errorf("getting jack %s: %w", id, err)
 		}
 		if string(bead.Type) != "jack" {
-			fmt.Fprintf(os.Stderr, "Error: %s is not a jack\n", id)
-			os.Exit(1)
+			return fmt.Errorf("%s is not a jack", id)
 		}
 		if string(bead.Status) == "closed" {
-			fmt.Fprintf(os.Stderr, "Error: jack %s is already closed\n", id)
-			os.Exit(1)
+			return fmt.Errorf("jack %s is already closed", id)
 		}
 
 		var fields map[string]any
@@ -73,8 +68,7 @@ var jackLogCmd = &cobra.Command{
 		}
 
 		if len(changes) >= model.JackMaxChanges {
-			fmt.Fprintf(os.Stderr, "Error: jack has reached maximum %d change records\n", model.JackMaxChanges)
-			os.Exit(1)
+			return fmt.Errorf("jack has reached maximum %d change records", model.JackMaxChanges)
 		}
 
 		// Default target to jack's target.
@@ -103,8 +97,7 @@ var jackLogCmd = &cobra.Command{
 			Fields: fieldsJSON,
 		})
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
+			return fmt.Errorf("updating jack %s: %w", id, err)
 		}
 
 		if jsonOutput {

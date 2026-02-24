@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"os"
 
 	"github.com/spf13/cobra"
 )
@@ -16,8 +15,7 @@ var deleteCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		for _, id := range args {
 			if err := beadsClient.DeleteBead(context.Background(), id); err != nil {
-				fmt.Fprintf(os.Stderr, "Error deleting %s: %v\n", id, err)
-				os.Exit(1)
+				return fmt.Errorf("deleting %s: %w", id, err)
 			}
 
 			fmt.Printf("Deleted %s\n", id)

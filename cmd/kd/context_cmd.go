@@ -37,14 +37,12 @@ var contextCmd = &cobra.Command{
 		// 1. Fetch the context config.
 		config, err := beadsClient.GetConfig(context.Background(), "context:"+name)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
+			return fmt.Errorf("getting context config %q: %w", name, err)
 		}
 
 		var cc contextConfig
 		if err := json.Unmarshal(config.Value, &cc); err != nil {
-			fmt.Fprintf(os.Stderr, "Error parsing context config: %v\n", err)
-			os.Exit(1)
+			return fmt.Errorf("parsing context config %q: %w", name, err)
 		}
 
 		// 2. Render each section.

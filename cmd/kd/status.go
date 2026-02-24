@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 
 	"github.com/groblegark/kbeads/internal/client"
 	"github.com/spf13/cobra"
@@ -27,8 +26,7 @@ var statusCmd = &cobra.Command{
 				Limit:  0,
 			})
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error querying %s beads: %v\n", s, err)
-				os.Exit(1)
+				return fmt.Errorf("querying %s beads: %w", s, err)
 			}
 			counts[s] = resp.Total
 			total += resp.Total
@@ -44,8 +42,7 @@ var statusCmd = &cobra.Command{
 			}
 			data, err := json.MarshalIndent(out, "", "  ")
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error marshaling JSON: %v\n", err)
-				os.Exit(1)
+				return fmt.Errorf("marshaling JSON: %w", err)
 			}
 			fmt.Println(string(data))
 		} else {

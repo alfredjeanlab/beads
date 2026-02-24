@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 
 	"github.com/spf13/cobra"
 )
@@ -16,16 +15,14 @@ var healthCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		status, err := beadsClient.Health(context.Background())
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
+			return fmt.Errorf("checking health: %w", err)
 		}
 
 		if jsonOutput {
 			out := map[string]string{"status": status}
 			data, err := json.MarshalIndent(out, "", "  ")
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error marshaling JSON: %v\n", err)
-				os.Exit(1)
+				return fmt.Errorf("marshaling JSON: %w", err)
 			}
 			fmt.Println(string(data))
 		} else {
@@ -33,7 +30,7 @@ var healthCmd = &cobra.Command{
 		}
 
 		if status != "ok" {
-			os.Exit(1)
+			return fmt.Errorf("unhealthy: %s", status)
 		}
 		return nil
 	},

@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"os"
 
 	"github.com/groblegark/kbeads/internal/client"
 	"github.com/spf13/cobra"
@@ -23,8 +22,7 @@ var unclaimCmd = &cobra.Command{
 				Status:   &open,
 			})
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error unclaiming %s: %v\n", id, err)
-				os.Exit(1)
+				return fmt.Errorf("unclaiming %s: %w", id, err)
 			}
 
 			if jsonOutput {

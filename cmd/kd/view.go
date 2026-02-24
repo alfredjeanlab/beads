@@ -49,14 +49,12 @@ var viewCmd = &cobra.Command{
 		// 1. Fetch the view config.
 		config, err := beadsClient.GetConfig(context.Background(), "view:"+name)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
+			return fmt.Errorf("getting view config %q: %w", name, err)
 		}
 
 		var vc viewConfig
 		if err := json.Unmarshal(config.Value, &vc); err != nil {
-			fmt.Fprintf(os.Stderr, "Error parsing view config: %v\n", err)
-			os.Exit(1)
+			return fmt.Errorf("parsing view config %q: %w", name, err)
 		}
 
 		// 2. Build the ListBeads request.
@@ -81,8 +79,7 @@ var viewCmd = &cobra.Command{
 		// 3. Call ListBeads.
 		resp, err := beadsClient.ListBeads(context.Background(), req)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
+			return fmt.Errorf("querying view %q: %w", name, err)
 		}
 
 		// 4. Display results.
