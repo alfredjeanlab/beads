@@ -42,6 +42,13 @@ const (
 	TypeBug     BeadType = "bug"
 )
 
+// Data-kind types.
+const (
+	TypeAdvice   BeadType = "advice"
+	TypeJack     BeadType = "jack"
+	TypeDecision BeadType = "decision"
+)
+
 // String returns the string representation of the bead type.
 func (t BeadType) String() string {
 	return string(t)
@@ -59,6 +66,8 @@ func KindFor(t BeadType) Kind {
 	switch t {
 	case TypeEpic, TypeTask, TypeFeature, TypeChore, TypeBug:
 		return KindIssue
+	case TypeAdvice, TypeJack:
+		return KindData
 	default:
 		return ""
 	}
@@ -72,6 +81,7 @@ const (
 	StatusInProgress Status = "in_progress"
 	StatusDeferred   Status = "deferred"
 	StatusClosed     Status = "closed"
+	StatusBlocked    Status = "blocked"
 )
 
 // String returns the string representation of the status.
@@ -82,7 +92,7 @@ func (s Status) String() string {
 // IsValid checks whether the status is a known value.
 func (s Status) IsValid() bool {
 	switch s {
-	case StatusOpen, StatusInProgress, StatusDeferred, StatusClosed:
+	case StatusOpen, StatusInProgress, StatusDeferred, StatusClosed, StatusBlocked:
 		return true
 	}
 	return false

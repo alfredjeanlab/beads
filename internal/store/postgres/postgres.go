@@ -13,8 +13,8 @@ import (
 	"github.com/golang-migrate/migrate/v4/source/iofs"
 	_ "github.com/lib/pq"
 
-	"github.com/alfredjeanlab/beads/internal/model"
-	"github.com/alfredjeanlab/beads/internal/store"
+	"github.com/groblegark/kbeads/internal/model"
+	"github.com/groblegark/kbeads/internal/store"
 )
 
 //go:embed migrations/*.sql
@@ -103,6 +103,14 @@ func (s *PostgresStore) CloseBead(ctx context.Context, id string, closedBy strin
 
 func (s *PostgresStore) DeleteBead(ctx context.Context, id string) error {
 	return queryDeleteBead(ctx, s.db, id)
+}
+
+func (s *PostgresStore) GetGraph(ctx context.Context, limit int) (*model.GraphResponse, error) {
+	return queryGetGraph(ctx, s.db, limit)
+}
+
+func (s *PostgresStore) GetStats(ctx context.Context) (*model.GraphStats, error) {
+	return queryGetStats(ctx, s.db)
 }
 
 func (s *PostgresStore) AddDependency(ctx context.Context, dep *model.Dependency) error {
@@ -215,6 +223,14 @@ func (s *txStore) CloseBead(ctx context.Context, id string, closedBy string) (*m
 
 func (s *txStore) DeleteBead(ctx context.Context, id string) error {
 	return queryDeleteBead(ctx, s.tx, id)
+}
+
+func (s *txStore) GetGraph(ctx context.Context, limit int) (*model.GraphResponse, error) {
+	return queryGetGraph(ctx, s.tx, limit)
+}
+
+func (s *txStore) GetStats(ctx context.Context) (*model.GraphStats, error) {
+	return queryGetStats(ctx, s.tx)
 }
 
 func (s *txStore) AddDependency(ctx context.Context, dep *model.Dependency) error {

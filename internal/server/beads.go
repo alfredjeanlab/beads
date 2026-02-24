@@ -6,13 +6,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 
-	beadsv1 "github.com/alfredjeanlab/beads/gen/beads/v1"
-	"github.com/alfredjeanlab/beads/internal/events"
-	"github.com/alfredjeanlab/beads/internal/idgen"
-	"github.com/alfredjeanlab/beads/internal/model"
-	"github.com/alfredjeanlab/beads/internal/store"
+	beadsv1 "github.com/groblegark/kbeads/gen/beads/v1"
+	"github.com/groblegark/kbeads/internal/events"
+	"github.com/groblegark/kbeads/internal/idgen"
+	"github.com/groblegark/kbeads/internal/model"
+	"github.com/groblegark/kbeads/internal/store"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -106,6 +107,20 @@ func (s *BeadsServer) createBead(ctx context.Context, in createBeadInput) (*mode
 	}
 
 	s.recordAndPublish(ctx, events.TopicBeadCreated, bead.ID, bead.CreatedBy, events.BeadCreated{Bead: bead})
+
+	if bead.Type == model.TypeAdvice {
+		s.recordAndPublish(ctx, events.TopicAdviceCreated, bead.ID, bead.CreatedBy, events.AdviceCreated{Bead: bead})
+	}
+
+	// If a decision bead is created, reset the requesting agent's gate to pending
+	// so the next Stop hook will check again.
+	if bead.Type == model.TypeDecision {
+		if agentID := decisionFieldStr(bead.Fields, "requesting_agent_bead_id"); agentID != "" {
+			if err := s.store.ClearGate(ctx, agentID, "decision"); err != nil {
+				slog.Warn("failed to clear decision gate", "agent", agentID, "err", err)
+			}
+		}
+	}
 
 	return bead, nil
 }
@@ -283,7 +298,22 @@ func (s *BeadsServer) updateBead(ctx context.Context, id string, in updateBeadIn
 	}
 
 	if in.Fields != nil {
-		bead.Fields = in.Fields
+		// Merge incoming fields into existing fields (patch semantics).
+		existing := make(map[string]any)
+		if len(bead.Fields) > 0 {
+			_ = json.Unmarshal(bead.Fields, &existing)
+		}
+		var patch map[string]any
+		if err := json.Unmarshal(in.Fields, &patch); err == nil {
+			for k, v := range patch {
+				existing[k] = v
+			}
+		}
+		merged, mergeErr := json.Marshal(existing)
+		if mergeErr != nil {
+			return nil, fmt.Errorf("failed to merge fields: %w", mergeErr)
+		}
+		bead.Fields = merged
 		changes["fields"] = bead.Fields
 	}
 	if in.labelsSet {
@@ -336,6 +366,13 @@ func (s *BeadsServer) updateBead(ctx context.Context, id string, in updateBeadIn
 		Bead:    bead,
 		Changes: changes,
 	})
+
+	if bead.Type == model.TypeAdvice {
+		s.recordAndPublish(ctx, events.TopicAdviceUpdated, bead.ID, "", events.AdviceUpdated{
+			Bead:    bead,
+			Changes: changes,
+		})
+	}
 
 	return bead, nil
 }
@@ -456,6 +493,19 @@ func (s *BeadsServer) CloseBead(ctx context.Context, req *beadsv1.CloseBeadReque
 		ClosedBy: req.GetClosedBy(),
 	})
 
+	if bead.Type == model.TypeAdvice {
+		s.recordAndPublish(ctx, events.TopicAdviceDeleted, bead.ID, req.GetClosedBy(), events.AdviceDeleted{BeadID: bead.ID})
+	}
+
+	// If a decision bead is closed, mark the requesting agent's gate satisfied.
+	if bead.Type == model.TypeDecision {
+		if agentID := decisionFieldStr(bead.Fields, "requesting_agent_bead_id"); agentID != "" {
+			if err := s.store.MarkGateSatisfied(ctx, agentID, "decision"); err != nil {
+				slog.Warn("failed to satisfy decision gate", "agent", agentID, "err", err)
+			}
+		}
+	}
+
 	return &beadsv1.CloseBeadResponse{Bead: beadToProto(bead)}, nil
 }
 
@@ -479,4 +529,25 @@ func (s *BeadsServer) DeleteBead(ctx context.Context, req *beadsv1.DeleteBeadReq
 	s.recordAndPublish(ctx, events.TopicBeadDeleted, req.GetId(), "", events.BeadDeleted{BeadID: req.GetId()})
 
 	return &beadsv1.DeleteBeadResponse{}, nil
+}
+
+// decisionFieldStr extracts a string field from a bead's JSON fields map.
+// Returns "" if fields is empty, not a JSON object, or the key is not found.
+func decisionFieldStr(fields json.RawMessage, key string) string {
+	if len(fields) == 0 {
+		return ""
+	}
+	var m map[string]json.RawMessage
+	if err := json.Unmarshal(fields, &m); err != nil {
+		return ""
+	}
+	raw, ok := m[key]
+	if !ok {
+		return ""
+	}
+	var s string
+	if err := json.Unmarshal(raw, &s); err != nil {
+		return ""
+	}
+	return s
 }

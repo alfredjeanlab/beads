@@ -7,8 +7,8 @@ import (
 	"errors"
 	"strings"
 
-	beadsv1 "github.com/alfredjeanlab/beads/gen/beads/v1"
-	"github.com/alfredjeanlab/beads/internal/model"
+	beadsv1 "github.com/groblegark/kbeads/gen/beads/v1"
+	"github.com/groblegark/kbeads/internal/model"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -26,6 +26,53 @@ var builtinConfigs = map[string]*model.Config{
 	"type:feature": {Key: "type:feature", Value: json.RawMessage(`{"kind":"issue","fields":[]}`)},
 	"type:chore":   {Key: "type:chore", Value: json.RawMessage(`{"kind":"issue","fields":[]}`)},
 	"type:bug":     {Key: "type:bug", Value: json.RawMessage(`{"kind":"issue","fields":[]}`)},
+	"type:advice": {Key: "type:advice", Value: json.RawMessage(`{
+		"kind": "data",
+		"fields": [
+			{"name": "hook_command",   "type": "string"},
+			{"name": "hook_trigger",   "type": "enum", "values": ["session-end", "before-commit", "before-push", "before-handoff"]},
+			{"name": "hook_timeout",   "type": "integer"},
+			{"name": "hook_on_failure","type": "enum", "values": ["block", "warn", "ignore"]},
+			{"name": "subscriptions",  "type": "string[]"},
+			{"name": "subscriptions_exclude", "type": "string[]"}
+		]
+	}`)},
+	"type:jack": {Key: "type:jack", Value: json.RawMessage(`{
+		"kind": "data",
+		"fields": [
+			{"name": "jack_target",          "type": "string",  "required": true},
+			{"name": "jack_reason",          "type": "string",  "required": true},
+			{"name": "jack_revert_plan",     "type": "string",  "required": true},
+			{"name": "jack_ttl",             "type": "string"},
+			{"name": "jack_expires_at",      "type": "string"},
+			{"name": "jack_original_ttl",    "type": "string"},
+			{"name": "jack_extension_count", "type": "integer"},
+			{"name": "jack_cumulative_ttl",  "type": "string"},
+			{"name": "jack_reverted",        "type": "boolean"},
+			{"name": "jack_closed_reason",   "type": "string"},
+			{"name": "jack_closed_at",       "type": "string"},
+			{"name": "jack_escalated",       "type": "boolean"},
+			{"name": "jack_escalated_at",    "type": "string"},
+			{"name": "jack_changes",         "type": "json"},
+			{"name": "jack_rig",             "type": "string"}
+		]
+	}`)},
+	"type:mail":     {Key: "type:mail", Value: json.RawMessage(`{"kind":"data","fields":[]}`)},
+	"type:agent":    {Key: "type:agent", Value: json.RawMessage(`{"kind":"data","fields":[]}`)},
+	"type:decision": {Key: "type:decision", Value: json.RawMessage(`{
+		"kind": "data",
+		"fields": [
+			{"name": "prompt",                  "type": "string", "required": true},
+			{"name": "options",                 "type": "json"},
+			{"name": "context",                 "type": "string"},
+			{"name": "requested_by",            "type": "string"},
+			{"name": "requesting_agent_bead_id","type": "string"},
+			{"name": "chosen",                  "type": "string"},
+			{"name": "response_text",           "type": "string"},
+			{"name": "responded_by",            "type": "string"},
+			{"name": "responded_at",            "type": "string"}
+		]
+	}`)},
 }
 
 var builtinConfigsByNamespace = func() map[string][]*model.Config {

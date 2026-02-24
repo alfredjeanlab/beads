@@ -6,6 +6,7 @@ on:
     tags: ["v*"]
   pull_request:
     branches: [main]
+  workflow_dispatch: {}
 
 permissions:
   contents: write
@@ -34,9 +35,27 @@ jobs:
           version: v1.64.8
           install-mode: goinstall
 
+  quench:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+      - name: Install quench
+        run: cargo install quench --git https://github.com/alfredjeanlab/quench
+      - name: Run quench checks
+        run: quench check
+
   binaries:
-    if: startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/main'
-    needs: [test, lint]
+    if: startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+    needs: [test]
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -74,13 +93,13 @@ jobs:
         run: |
           go build \
             -ldflags="-s -w -X main.Version=${{ steps.ver.outputs.version }} -X main.Build=${GITHUB_SHA::7}" \
-            -o bd \
-            ./cmd/bd
-          tar -czf bd-${{ matrix.goos }}-${{ matrix.arch }}.tar.gz bd
+            -o kd \
+            ./cmd/kd
+          tar -czf kd-${{ matrix.goos }}-${{ matrix.arch }}.tar.gz kd
       - uses: actions/upload-artifact@v4
         with:
-          name: bd-${{ matrix.goos }}-${{ matrix.arch }}
-          path: bd-${{ matrix.goos }}-${{ matrix.arch }}.tar.gz
+          name: kd-${{ matrix.goos }}-${{ matrix.arch }}
+          path: kd-${{ matrix.goos }}-${{ matrix.arch }}.tar.gz
 
   release:
     if: startsWith(github.ref, 'refs/tags/v')
@@ -98,8 +117,8 @@ jobs:
 
   docker:
     name: Docker (${{ matrix.arch }})
-    if: startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/main'
-    needs: [test, lint]
+    if: startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+    needs: [test]
     runs-on: ${{ matrix.runner }}
     strategy:
       matrix:
@@ -144,7 +163,7 @@ jobs:
 
   manifest:
     name: Manifest
-    if: startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/main'
+    if: startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
     needs: [docker]
     runs-on: ubuntu-latest
     steps:
