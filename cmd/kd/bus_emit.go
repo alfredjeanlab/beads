@@ -13,6 +13,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 
@@ -100,6 +101,14 @@ Block reason is written to stderr as {"decision":"block","reason":"..."}.`,
 			os.Exit(0)
 		}
 
+		// On SessionStart, inject the full kd prime context.
+		// We do this client-side because the prime output functions live in this binary
+		// and the server is remote (HTTP API) — no subprocess needed.
+		if hookType == "SessionStart" {
+			agentID := resolvePrimeAgentFromEnv(actor)
+			outputPrimeForHook(os.Stdout, agentID)
+		}
+
 		// Write warnings as system-reminder tags to stdout (Claude Code reads these).
 		for _, w := range resp.Warnings {
 			fmt.Printf("<system-reminder>%s</system-reminder>\n", w)
@@ -161,4 +170,49 @@ func init() {
 // Exported so other commands can reuse it if needed.
 func printSystemReminder(text string) {
 	fmt.Printf("<system-reminder>%s</system-reminder>\n", strings.TrimSpace(text))
+}
+
+// resolvePrimeAgentFromEnv resolves agent identity from env vars and the global actor.
+// Used by bus emit when --for flag is not available.
+func resolvePrimeAgentFromEnv(globalActor string) string {
+	if v := os.Getenv("KD_ACTOR"); v != "" {
+		return v
+	}
+	if v := os.Getenv("KD_AGENT_ID"); v != "" {
+		return v
+	}
+	if globalActor != "" && globalActor != "unknown" {
+		return globalActor
+	}
+	return ""
+}
+
+// outputPrimeForHook generates full kd prime output wrapped in a system-reminder tag.
+// This reuses the same output functions as `kd prime` but wraps them for hook injection.
+func outputPrimeForHook(w io.Writer, agentID string) {
+	var buf strings.Builder
+
+	// 1. Workflow context.
+	outputWorkflowContext(&buf)
+
+	// 2. Advice.
+	if agentID != "" {
+		outputAdvice(&buf, beadsClient, agentID)
+	}
+
+	// 3. Jacks.
+	outputJackSection(&buf, beadsClient)
+
+	// 4. Roster.
+	outputRosterSection(&buf, beadsClient, agentID)
+
+	// 5. Auto-assign.
+	if agentID != "" {
+		outputAutoAssign(&buf, beadsClient, agentID)
+	}
+
+	content := buf.String()
+	if content != "" {
+		fmt.Fprintf(w, "<system-reminder>\nSessionStart:compact hook success: %s</system-reminder>\n", content)
+	}
 }
