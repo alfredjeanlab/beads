@@ -139,7 +139,7 @@ func TestRunSetupClaudeRemove(t *testing.T) {
 	// Re-read and verify.
 	data, _ = os.ReadFile(filepath.Join(claudeDir, "settings.json"))
 	var result map[string]any
-	json.Unmarshal(data, &result)
+	_ = json.Unmarshal(data, &result)
 	hooks := result["hooks"].(map[string]any)
 
 	// SessionStart should still have the other-tool entry.
@@ -225,7 +225,7 @@ func TestRunSetupClaudeCheck_Installed(t *testing.T) {
 	}
 
 	var settings map[string]any
-	json.Unmarshal(data, &settings)
+	_ = json.Unmarshal(data, &settings)
 	hooks := settings["hooks"].(map[string]any)
 
 	if !hookContainsKD(hooks, "SessionStart") {
@@ -259,7 +259,7 @@ func TestRunSetupClaudeCheck_NoKDHooks(t *testing.T) {
 
 	// Verify hooks check fails.
 	var result map[string]any
-	json.Unmarshal(data, &result)
+	_ = json.Unmarshal(data, &result)
 	hooks := result["hooks"].(map[string]any)
 
 	if hookContainsKD(hooks, "SessionStart") {

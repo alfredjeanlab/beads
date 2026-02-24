@@ -48,7 +48,7 @@ var jackListCmd = &cobra.Command{
 		for _, bead := range resp.Beads {
 			var fields map[string]any
 			if len(bead.Fields) > 0 {
-				json.Unmarshal(bead.Fields, &fields)
+				_ = json.Unmarshal(bead.Fields, &fields)
 			}
 
 			target, _ := fields["jack_target"].(string)

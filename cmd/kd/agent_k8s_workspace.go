@@ -250,9 +250,9 @@ func resetStaleBranch(workspace string) {
 	}
 	fmt.Printf("[kd agent start] WARNING: workspace on stale branch '%s', resetting to main\n", branch)
 	_ = runGitIn(workspace, "checkout", "--", ".")
-	runGitIn(workspace, "clean", "-fd")
+	_ = runGitIn(workspace, "clean", "-fd")
 	if runGitIn(workspace, "checkout", "main") != nil {
-		runGitIn(workspace, "checkout", "-b", "main")
+		_ = runGitIn(workspace, "checkout", "-b", "main")
 	}
 	out, _ = exec.Command("git", "-C", workspace, "branch", "--show-current").Output()
 	fmt.Printf("[kd agent start] workspace now on branch: %s\n", strings.TrimSpace(string(out)))

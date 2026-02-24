@@ -53,7 +53,7 @@ var jackLogCmd = &cobra.Command{
 
 		var fields map[string]any
 		if len(bead.Fields) > 0 {
-			json.Unmarshal(bead.Fields, &fields)
+			_ = json.Unmarshal(bead.Fields, &fields)
 		}
 		if fields == nil {
 			fields = make(map[string]any)
