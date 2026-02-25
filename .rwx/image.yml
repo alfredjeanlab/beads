@@ -73,6 +73,7 @@ tasks:
       - "cmd/kd/*.go"
       - "cmd/**/*.go"
       - "internal/**/*.go"
+      - "internal/**/*.sql"
       - "gen/**/*.go"
       - "go.mod"
       - "go.sum"
