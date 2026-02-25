@@ -24,6 +24,13 @@ var showCmd = &cobra.Command{
 			printBeadJSON(bead)
 		} else {
 			printBeadTable(bead)
+			if len(bead.Dependencies) > 0 {
+				fmt.Println()
+				fmt.Println("Depends On:")
+				for _, d := range bead.Dependencies {
+					fmt.Printf("  %s (%s)\n", d.DependsOnID, d.Type)
+				}
+			}
 			if len(bead.Comments) > 0 {
 				fmt.Println()
 				fmt.Println("Comments:")
