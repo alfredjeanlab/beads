@@ -19,20 +19,24 @@ kd create "Beads crew agent onboarding: complete workflow for kbeads agents" \
   -l global \
   -d '## Kbeads Agent Workflow
 
+### Command Split
+- **kd** — CRUD operations (create, show, list, search, update, close, claim, dep, label, comment)
+- **gb** — Orchestration (prime, ready, news, decision, yield, gate, bus, mail, setup, hook)
+
 ### Session Start
-Your session is auto-initialized by `kd prime` (via Claude Code SessionStart hook). This injects:
+Your session is auto-initialized by `gb prime` (via Claude Code SessionStart hook). This injects:
 - Workflow commands and patterns
 - Agent-specific advice beads
 - Live agent roster (to avoid work duplication)
 
 ### Finding and Claiming Work
 ```bash
-kd ready                    # Show unblocked, unclaimed tasks
-kd news                     # Check what other agents are working on
+gb ready                    # Show unblocked, unclaimed tasks
+gb news                     # Check what other agents are working on
 kd show <id>                # View full issue details
 kd claim <id>               # Claim task (sets assignee + in_progress)
 ```
-**Rules**: Only claim ONE task at a time. Check `kd news` first to avoid conflicts.
+**Rules**: Only claim ONE task at a time. Check `gb news` first to avoid conflicts.
 
 ### Doing the Work
 1. Read the issue description carefully (`kd show <id>`)
@@ -43,10 +47,10 @@ kd claim <id>               # Claim task (sets assignee + in_progress)
 ### Human Decisions
 When you need human input (approval, choices, clarification):
 ```bash
-kd decision create --no-wait \
+gb decision create --no-wait \
   --prompt="What should I do?" \
   --options='\''[{"id":"a","short":"Option A","label":"Full description of A"}]'\''
-kd yield    # Block and wait for response
+gb yield    # Block and wait for response
 ```
 
 ### Completing Work
@@ -72,13 +76,13 @@ kd create "Checkpoint decision protocol: When you hit a Stop hook checkpoint" \
   -l global \
   -d 'Checkpoint decision protocol: When you hit a Stop hook checkpoint, follow these steps:
 1. Review the roster. Create beads for any next steps you identified.
-2. Check for existing pending decisions: run '\''kd decision list'\'' first.
+2. Check for existing pending decisions: run '\''gb decision list'\'' first.
    Do NOT offer beads that already appear as options in another pending decision.
-3. Create a decision with '\''kd decision create --no-wait'\'':
+3. Create a decision with '\''gb decision create --no-wait'\'':
    --prompt="<what you did, blockers hit, and why these options>"
    --options='\''[{"id":"...","short":"...","label":"...","bead_id":"..."},...]'\''
 4. If you are DONE with your current task, run '\''kd close <id>'\'' first.
-5. Run '\''kd yield'\'' to block and wait for the human'\''s response.'
+5. Run '\''gb yield'\'' to block and wait for the human'\''s response.'
 
 echo "  [3/6] Checkpoint protocol"
 
@@ -90,12 +94,12 @@ kd create "kbeads vs beads: key platform differences for agents" \
 
 kbeads uses a different architecture from beads:
 - **Storage**: PostgreSQL (not Dolt) — always available, no sync needed
-- **CLI**: `kd` (not `bd`) — all commands start with kd
+- **CLIs**: `kd` for CRUD, `gb` for orchestration (not `bd`)
 - **Server**: HTTP API at KD_HOST (not Unix socket daemon)
 - **Env vars**: KD_ACTOR, KD_AGENT_ID, KD_HOST (not BD_ACTOR, BEADS_ACTOR)
 - **No .beads/ directory**: kbeads does not use local file storage
 - **Config**: `kd config` backed by Postgres config table
-- **Setup**: `kd setup claude --defaults` installs Claude Code hooks'
+- **Setup**: `gb setup claude --defaults` installs Claude Code hooks'
 
 echo "  [4/6] Platform differences"
 
@@ -108,13 +112,13 @@ kd create "macOS SIGKILL when overwriting signed binaries — use rm+cp, not cp"
 echo "  [5/6] macOS binary warning"
 
 # 6. Agent-mode optimizations
-kd create "kd ready/list agent-mode optimizations: filters out other agents' work" \
+kd create "gb ready/list agent-mode optimizations: filters out other agents' work" \
   -t advice -p 2 \
   -l global \
   -d 'Agent-mode (CLAUDE_CODE or KD_AGENT_MODE=1) optimizations:
 
-1. **kd ready** auto-filters out items assigned to other agents. Only shows: unassigned items (claimable) + items assigned to you.
-2. **kd news** excludes your own work by default — shows only other agents'\'' activity.
+1. **gb ready** auto-filters out items assigned to other agents. Only shows: unassigned items (claimable) + items assigned to you.
+2. **gb news** excludes your own work by default — shows only other agents'\'' activity.
 3. **kd list** excludes advice, runbook, and molecule types by default.
 
 These changes reduce noise for agents deciding what work to pick up.'

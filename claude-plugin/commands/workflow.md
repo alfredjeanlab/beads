@@ -4,10 +4,13 @@ description: Show the AI-supervised issue workflow guide
 
 Display the kbeads workflow for agents:
 
+## Command Split
+- **kd** — CRUD (create, show, list, close, claim, dep, label, comment, update, delete)
+- **gb** — Orchestration (prime, ready, news, decision, yield, gate, bus, mail, setup)
+
 ## Starting Work
 ```bash
-kd news              # Check what others are working on
-kd ready             # Find available work
+gb ready             # Find available work
 kd show <id>         # Review issue details
 kd claim <id>        # Claim it (sets assignee + in_progress)
 ```
@@ -26,5 +29,6 @@ git add <files> && git commit -m "..." && git push
 ## Decision Points
 When you need human input:
 ```bash
-kd decision create --prompt="Question?" --options='[...]'
+gb decision create --prompt="Question?" --options='[...]'
+gb yield
 ```
