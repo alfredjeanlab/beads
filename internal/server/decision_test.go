@@ -26,28 +26,43 @@ import (
 
 type gateKey struct{ agent, gate string }
 
+type gateState struct {
+	satisfied bool
+	sessionID string
+}
+
 type gatedMockStore struct {
 	*mockStore
-	gates map[gateKey]bool // true = satisfied
+	gates map[gateKey]*gateState
 }
 
 func newGatedStore() *gatedMockStore {
 	return &gatedMockStore{
 		mockStore: newMockStore(),
-		gates:     make(map[gateKey]bool),
+		gates:     make(map[gateKey]*gateState),
 	}
 }
 
-func (g *gatedMockStore) UpsertGate(_ context.Context, agentID, gateID, _ string) error {
+func (g *gatedMockStore) UpsertGate(_ context.Context, agentID, gateID, sessionID string) error {
 	k := gateKey{agentID, gateID}
-	if _, exists := g.gates[k]; !exists {
-		g.gates[k] = false
+	st, exists := g.gates[k]
+	if !exists {
+		g.gates[k] = &gateState{satisfied: false, sessionID: sessionID}
+		return nil
+	}
+	// New non-empty session ID: reset to pending.
+	if sessionID != "" && st.sessionID != sessionID {
+		st.satisfied = false
+		st.sessionID = sessionID
 	}
 	return nil
 }
 
 func (g *gatedMockStore) MarkGateSatisfied(_ context.Context, agentID, gateID string) error {
-	g.gates[gateKey{agentID, gateID}] = true
+	k := gateKey{agentID, gateID}
+	if st, ok := g.gates[k]; ok {
+		st.satisfied = true
+	}
 	return nil
 }
 
@@ -57,7 +72,10 @@ func (g *gatedMockStore) ClearGate(_ context.Context, agentID, gateID string) er
 }
 
 func (g *gatedMockStore) IsGateSatisfied(_ context.Context, agentID, gateID string) (bool, error) {
-	return g.gates[gateKey{agentID, gateID}], nil
+	if st, ok := g.gates[gateKey{agentID, gateID}]; ok {
+		return st.satisfied, nil
+	}
+	return false, nil
 }
 
 func (g *gatedMockStore) ListGates(_ context.Context, _ string) ([]model.GateRow, error) {
@@ -218,7 +236,7 @@ func TestDecisionGateFlow(t *testing.T) {
 	decisionID := decisionBead["id"].(string)
 
 	// Gate should still be pending (decision not yet resolved).
-	if gs.gates[gateKey{agentID, "decision"}] {
+	if st := gs.gates[gateKey{agentID, "decision"}]; st != nil && st.satisfied {
 		t.Fatal("gate should not be satisfied yet")
 	}
 
@@ -229,7 +247,7 @@ func TestDecisionGateFlow(t *testing.T) {
 	})
 	requireStatus(t, resolveRec, 200)
 
-	if !gs.gates[gateKey{agentID, "decision"}] {
+	if st := gs.gates[gateKey{agentID, "decision"}]; st == nil || !st.satisfied {
 		t.Fatal("gate should be satisfied after decision resolved")
 	}
 
@@ -290,8 +308,82 @@ func TestDecisionGateSatisfiedByClose(t *testing.T) {
 	})
 	requireStatus(t, closeRec, 200)
 
-	if !gs.gates[gateKey{agentID, "decision"}] {
+	if st := gs.gates[gateKey{agentID, "decision"}]; st == nil || !st.satisfied {
 		t.Fatal("gate should be satisfied after closing decision bead")
+	}
+}
+
+// TestDecisionGateCrossSessionReset verifies that a satisfied gate is reset to
+// pending when a new Claude session ID arrives on the Stop hook.
+//
+// This is the bug: UpsertGate previously used WHERE status='pending' on the
+// DO UPDATE, so a satisfied gate was never reset for a new session, causing
+// the decision checkpoint to never fire again after the first session.
+func TestDecisionGateCrossSessionReset(t *testing.T) {
+	_, gs, h := newGatedTestServer()
+
+	const agentID = "kd-agent-cross-session"
+
+	// Session 1: first Stop → gate created pending → blocked.
+	stopRec1 := doJSON(t, h, "POST", "/v1/hooks/emit", map[string]any{
+		"agent_bead_id":     agentID,
+		"hook_type":         "Stop",
+		"claude_session_id": "sess-1",
+		"actor":             "test-agent",
+	})
+	requireStatus(t, stopRec1, 200)
+	var resp1 map[string]any
+	decodeJSON(t, stopRec1, &resp1)
+	if resp1["block"] != true {
+		t.Fatalf("session 1: expected block=true, got %v", resp1)
+	}
+
+	// Session 1: resolve decision → gate satisfied.
+	decisionRec := doJSON(t, h, "POST", "/v1/beads", map[string]any{
+		"title": "session 1 decision",
+		"type":  "decision",
+		"kind":  "data",
+		"fields": map[string]any{
+			"prompt":                   "Proceed?",
+			"requesting_agent_bead_id": agentID,
+		},
+	})
+	requireStatus(t, decisionRec, 201)
+	var decisionBead map[string]any
+	decodeJSON(t, decisionRec, &decisionBead)
+
+	resolveRec := doJSON(t, h, "POST", "/v1/decisions/"+decisionBead["id"].(string)+"/resolve", map[string]any{
+		"selected_option": "continue",
+		"responded_by":    "human",
+	})
+	requireStatus(t, resolveRec, 200)
+
+	// Session 1: second Stop → gate is satisfied → allowed.
+	stopRec2 := doJSON(t, h, "POST", "/v1/hooks/emit", map[string]any{
+		"agent_bead_id":     agentID,
+		"hook_type":         "Stop",
+		"claude_session_id": "sess-1",
+		"actor":             "test-agent",
+	})
+	requireStatus(t, stopRec2, 200)
+	var resp2 map[string]any
+	decodeJSON(t, stopRec2, &resp2)
+	if resp2["block"] == true {
+		t.Fatalf("session 1 second stop: expected unblocked, got %v", resp2)
+	}
+
+	// Session 2: new session ID → gate should reset to pending → blocked again.
+	stopRec3 := doJSON(t, h, "POST", "/v1/hooks/emit", map[string]any{
+		"agent_bead_id":     agentID,
+		"hook_type":         "Stop",
+		"claude_session_id": "sess-2",
+		"actor":             "test-agent",
+	})
+	requireStatus(t, stopRec3, 200)
+	var resp3 map[string]any
+	decodeJSON(t, stopRec3, &resp3)
+	if resp3["block"] != true {
+		t.Fatalf("session 2: expected block=true after session reset, got %v", resp3)
 	}
 }
 

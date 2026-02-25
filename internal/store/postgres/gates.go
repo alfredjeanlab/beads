@@ -8,15 +8,27 @@ import (
 	"github.com/groblegark/kbeads/internal/model"
 )
 
-// UpsertGate inserts a new gate row or updates the claude_session_id if the
-// gate is still pending. A satisfied gate is never overwritten.
+// UpsertGate inserts a new gate row or handles conflicts:
+//   - New session (non-empty session ID that differs from stored): resets gate to 'pending'
+//   - Same session or no session ID: keeps current status unchanged
 func (s *PostgresStore) UpsertGate(ctx context.Context, agentBeadID, gateID, claudeSessionID string) error {
 	_, err := s.db.ExecContext(ctx, `
 		INSERT INTO session_gates (agent_bead_id, gate_id, claude_session_id)
 		VALUES ($1, $2, $3)
 		ON CONFLICT (agent_bead_id, gate_id) DO UPDATE
-			SET claude_session_id = EXCLUDED.claude_session_id
-			WHERE session_gates.status = 'pending'`,
+			SET claude_session_id = EXCLUDED.claude_session_id,
+			    status = CASE
+			        WHEN EXCLUDED.claude_session_id != ''
+			             AND session_gates.claude_session_id IS DISTINCT FROM EXCLUDED.claude_session_id
+			        THEN 'pending'
+			        ELSE session_gates.status
+			    END,
+			    satisfied_at = CASE
+			        WHEN EXCLUDED.claude_session_id != ''
+			             AND session_gates.claude_session_id IS DISTINCT FROM EXCLUDED.claude_session_id
+			        THEN NULL
+			        ELSE session_gates.satisfied_at
+			    END`,
 		agentBeadID, gateID, claudeSessionID,
 	)
 	return err
@@ -111,8 +123,19 @@ func (s *txStore) UpsertGate(ctx context.Context, agentBeadID, gateID, claudeSes
 		INSERT INTO session_gates (agent_bead_id, gate_id, claude_session_id)
 		VALUES ($1, $2, $3)
 		ON CONFLICT (agent_bead_id, gate_id) DO UPDATE
-			SET claude_session_id = EXCLUDED.claude_session_id
-			WHERE session_gates.status = 'pending'`,
+			SET claude_session_id = EXCLUDED.claude_session_id,
+			    status = CASE
+			        WHEN EXCLUDED.claude_session_id != ''
+			             AND session_gates.claude_session_id IS DISTINCT FROM EXCLUDED.claude_session_id
+			        THEN 'pending'
+			        ELSE session_gates.status
+			    END,
+			    satisfied_at = CASE
+			        WHEN EXCLUDED.claude_session_id != ''
+			             AND session_gates.claude_session_id IS DISTINCT FROM EXCLUDED.claude_session_id
+			        THEN NULL
+			        ELSE session_gates.satisfied_at
+			    END`,
 		agentBeadID, gateID, claudeSessionID,
 	)
 	return err
