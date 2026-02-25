@@ -113,3 +113,21 @@ Runs parallel with build:
 3. **E2E_FAST tradeoff** -- disabling traces/screenshots saves time but loses failure diagnostics
 4. **Runner resource monitoring** -- confirm kube-x86-xlarge has enough CPU/memory for 6 Chromium instances
 5. **Warm pod pool** -- keep app pods warm between deploys instead of recreating
+
+## Baseline Run Results (MR !125, Pipeline #957)
+
+**Date:** 2026-02-25, **Branch:** perf/ci-test-acceleration
+
+| Metric | Value |
+|--------|-------|
+| Total pass rate | 0/295 (0%) |
+| Shard 1 | 0/96 (27 failed, 69 skipped) |
+| Shard 2 | 0/103 (35 failed, 68 skipped) |
+| Shard 3 | 0/96 (28 failed, 68 skipped) |
+| Root cause | test-data-restore pre-install hook BackoffLimitExceeded |
+| Deploy-mr | Failed (allow_failure=true, so e2e proceeded against broken app) |
+| Build | Only site-api + fics-playwright built (others skipped, no matching tag) |
+
+**Key blocker:** The test-data-restore job (drops/recreates databases from S3 seed dumps) fails repeatedly
+on fresh namespace installs. 4 pod attempts, all error within 20-40s. This prevents any meaningful
+test execution. See beads-pgdl for tracking.
