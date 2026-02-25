@@ -22,6 +22,7 @@ var listCmd = &cobra.Command{
 		offset, _ := cmd.Flags().GetInt("offset")
 		fieldFlags, _ := cmd.Flags().GetStringArray("field")
 		noBlockers, _ := cmd.Flags().GetBool("no-blockers")
+		sort, _ := cmd.Flags().GetString("sort")
 
 		req := &client.ListBeadsRequest{
 			Status:     status,
@@ -31,6 +32,7 @@ var listCmd = &cobra.Command{
 			Assignee:   assignee,
 			Offset:     offset,
 			NoOpenDeps: noBlockers,
+			Sort:       sort,
 		}
 
 		if len(fieldFlags) > 0 {
@@ -68,4 +70,5 @@ func init() {
 	listCmd.Flags().Int("offset", 0, "offset for pagination")
 	listCmd.Flags().StringArrayP("field", "f", nil, "filter by custom field (key=value, repeatable)")
 	listCmd.Flags().Bool("no-blockers", false, "only show beads with no open/in_progress/deferred dependencies")
+	listCmd.Flags().String("sort", "", "sort column: priority, created_at, updated_at, title, status, type (prefix with - for descending, e.g. -priority)")
 }
