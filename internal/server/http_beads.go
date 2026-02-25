@@ -77,6 +77,9 @@ func (s *BeadsServer) handleListBeads(w http.ResponseWriter, r *http.Request) {
 			filter.Offset = n
 		}
 	}
+	if q.Get("no_open_deps") == "true" {
+		filter.NoOpenDeps = true
+	}
 
 	beads, total, err := s.store.ListBeads(r.Context(), filter)
 	if err != nil {

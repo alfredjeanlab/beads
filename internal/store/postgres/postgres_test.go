@@ -596,6 +596,13 @@ func TestQueryListBeads(t *testing.T) {
 			wantCount: 1,
 			wantTotal: 3,
 		},
+		{
+			name:      "FilterNoOpenDeps",
+			filter:    model.BeadFilter{NoOpenDeps: true},
+			queryPat:  "SELECT .+ FROM beads WHERE NOT EXISTS .+deps.+dep\\.status IN.+ ORDER BY",
+			wantCount: 1,
+			wantTotal: 1,
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			db, mock := newMockDB(t)

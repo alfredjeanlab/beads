@@ -75,6 +75,9 @@ func (c *HTTPClient) ListBeads(ctx context.Context, req *ListBeadsRequest) (*Lis
 	if req.Priority != nil {
 		q.Set("priority", fmt.Sprintf("%d", *req.Priority))
 	}
+	if req.NoOpenDeps {
+		q.Set("no_open_deps", "true")
+	}
 	if req.Limit > 0 {
 		q.Set("limit", fmt.Sprintf("%d", req.Limit))
 	}

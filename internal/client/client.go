@@ -128,15 +128,16 @@ type CreateBeadRequest struct {
 
 // ListBeadsRequest holds parameters for listing beads.
 type ListBeadsRequest struct {
-	Status   []string `json:"status,omitempty"`
-	Type     []string `json:"type,omitempty"`
-	Kind     []string `json:"kind,omitempty"`
-	Labels   []string `json:"labels,omitempty"`
-	Assignee string   `json:"assignee,omitempty"`
-	Search   string   `json:"search,omitempty"`
-	Sort     string   `json:"sort,omitempty"`
-	Priority *int     `json:"priority,omitempty"`
-	Limit    int      `json:"limit,omitempty"`
+	Status       []string          `json:"status,omitempty"`
+	Type         []string          `json:"type,omitempty"`
+	Kind         []string          `json:"kind,omitempty"`
+	Labels       []string          `json:"labels,omitempty"`
+	Assignee     string            `json:"assignee,omitempty"`
+	Search       string            `json:"search,omitempty"`
+	Sort         string            `json:"sort,omitempty"`
+	Priority     *int              `json:"priority,omitempty"`
+	NoOpenDeps   bool              `json:"no_open_deps,omitempty"` // only beads with no open/in_progress/deferred dependencies
+	Limit        int               `json:"limit,omitempty"`
 	Offset       int               `json:"offset,omitempty"`
 	FieldFilters map[string]string `json:"field_filters,omitempty"`
 }
