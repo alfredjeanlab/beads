@@ -243,3 +243,31 @@ func TestGRPCCreateBead_LabelFailure_ReturnsError(t *testing.T) {
 		t.Fatal("expected error when AddLabel fails")
 	}
 }
+
+func TestGRPCCreateBead_AgentType_RequiresFields(t *testing.T) {
+	srv, _, ctx := testCtx(t)
+
+	// Without required fields → should fail.
+	_, err := srv.CreateBead(ctx, &beadsv1.CreateBeadRequest{
+		Title: "my-agent", Type: "agent",
+	})
+	if err == nil {
+		t.Fatal("expected error when agent, role, project fields are missing")
+	}
+}
+
+func TestGRPCCreateBead_AgentType_WithRequiredFields(t *testing.T) {
+	srv, _, ctx := testCtx(t)
+
+	resp, err := srv.CreateBead(ctx, &beadsv1.CreateBeadRequest{
+		Title:  "my-agent",
+		Type:   "agent",
+		Fields: []byte(`{"agent":"my-agent","role":"crew","project":"my-project"}`),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp.Bead.Kind != "config" {
+		t.Fatalf("expected kind=config, got %q", resp.Bead.Kind)
+	}
+}
