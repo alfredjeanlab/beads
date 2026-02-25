@@ -114,7 +114,9 @@ Runs parallel with build:
 4. **Runner resource monitoring** -- confirm kube-x86-xlarge has enough CPU/memory for 6 Chromium instances
 5. **Warm pod pool** -- keep app pods warm between deploys instead of recreating
 
-## Baseline Run Results (MR !125, Pipeline #957)
+## Run Results
+
+### Run 1 (Pipeline #2347870105) -- Baseline
 
 **Date:** 2026-02-25, **Branch:** perf/ci-test-acceleration
 
@@ -128,6 +130,23 @@ Runs parallel with build:
 | Deploy-mr | Failed (allow_failure=true, so e2e proceeded against broken app) |
 | Build | Only site-api + fics-playwright built (others skipped, no matching tag) |
 
-**Key blocker:** The test-data-restore job (drops/recreates databases from S3 seed dumps) fails repeatedly
-on fresh namespace installs. 4 pod attempts, all error within 20-40s. This prevents any meaningful
-test execution. See beads-pgdl for tracking.
+**Root cause:** ACK EKS controller in CrashLoopBackOff (missing Capability CRD). Pod Identity
+credentials never provisioned for new namespace. **Fixed:** Applied CRD, controller recovered.
+
+### Run 2 (Pipeline #2347934696) -- After ACK fix
+
+**Date:** 2026-02-25, **Branch:** perf/ci-test-acceleration
+
+| Metric | Value |
+|--------|-------|
+| Total pass rate | 2/295 (0.7%) |
+| Shard 1 | 2/96 (24 failed, 70 skipped/not run) |
+| Shard 2 | 0/103 (36 failed, 67 not run) |
+| Shard 3 | 0/96 (28 failed, 68 not run) |
+| Deploy-mr | **Success (209s)** |
+| Root cause | 401 Unauthenticated from sponsor-api |
+| Build | fics-playwright only (site-api cached) |
+
+**Root cause:** test-data-restore (hook weight 4) runs in parallel with sponsor-api-setup (weight 4).
+test-data-restore drops/recreates databases from S3 seeds, clobbering sponsor-api-setup's migrations
+and Keycloak client configuration. See beads-mvq8 for tracking.
