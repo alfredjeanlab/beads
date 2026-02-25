@@ -114,6 +114,13 @@ jobs:
         with:
           files: artifacts/*
           generate_release_notes: true
+      - name: Trigger gasboat agent rebuild
+        run: |
+          gh workflow run bump-kd.yml \
+            -R groblegark/gasboat \
+            -f version=${{ github.ref_name }}
+        env:
+          GH_TOKEN: ${{ secrets.GASBOAT_DISPATCH_TOKEN }}
 
   docker:
     name: Docker (${{ matrix.arch }})
