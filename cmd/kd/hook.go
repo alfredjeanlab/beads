@@ -19,8 +19,9 @@ import (
 )
 
 var hookCmd = &cobra.Command{
-	Use:   "hook",
-	Short: "Agent hook subcommands (replaces shell hook scripts)",
+	Use:        "hook",
+	Short:      "Agent hook subcommands (replaces shell hook scripts)",
+	Deprecated: "use 'gb hook' instead (ported to gasboat)",
 }
 
 // ── kd hook check-mail ────────────────────────────────────────────────────

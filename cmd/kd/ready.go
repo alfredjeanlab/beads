@@ -9,8 +9,9 @@ import (
 )
 
 var readyCmd = &cobra.Command{
-	Use:   "ready",
-	Short: "Show beads ready to work on (open, not blocked)",
+	Use:        "ready",
+	Short:      "Show beads ready to work on (open, not blocked)",
+	Deprecated: "use 'gb ready' instead (ported to gasboat)",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		beadType, _ := cmd.Flags().GetStringSlice("type")
 		assignee, _ := cmd.Flags().GetString("assignee")

@@ -9,8 +9,9 @@ import (
 )
 
 var gateCmd = &cobra.Command{
-	Use:   "gate",
-	Short: "Manage session gates",
+	Use:        "gate",
+	Short:      "Manage session gates",
+	Deprecated: "use 'gb gate' instead (ported to gasboat)",
 }
 
 var gateStatusCmd = &cobra.Command{

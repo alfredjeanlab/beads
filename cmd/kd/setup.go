@@ -12,8 +12,9 @@ import (
 )
 
 var setupCmd = &cobra.Command{
-	Use:   "setup",
-	Short: "Setup commands for agent environment",
+	Use:        "setup",
+	Short:      "Setup commands for agent environment",
+	Deprecated: "use 'gb setup' instead (ported to gasboat)",
 }
 
 var setupClaudeCmd = &cobra.Command{

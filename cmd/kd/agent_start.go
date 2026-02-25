@@ -27,8 +27,9 @@ import (
 )
 
 var agentCmd = &cobra.Command{
-	Use:   "agent",
-	Short: "Manage local agent sessions",
+	Use:        "agent",
+	Short:      "Manage local agent sessions",
+	Deprecated: "use 'gb agent' instead (ported to gasboat)",
 }
 
 var agentStartCmd = &cobra.Command{

@@ -24,9 +24,10 @@ func resolveMailActor() string {
 // ── kd mail (parent) ───────────────────────────────────────────────────
 
 var mailCmd = &cobra.Command{
-	Use:   "mail",
-	Short: "Agent-to-agent mail via beads",
-	Long:  `Send and receive mail between agents. Mail items are beads with type="mail".`,
+	Use:        "mail",
+	Short:      "Agent-to-agent mail via beads",
+	Long:       `Send and receive mail between agents. Mail items are beads with type="mail".`,
+	Deprecated: "use 'gb mail' instead (ported to gasboat)",
 }
 
 // ── kd mail send ────────────────────────────────────────────────────────
@@ -110,9 +111,10 @@ var mailInboxCmd = &cobra.Command{
 }
 
 var inboxCmd = &cobra.Command{
-	Use:   "inbox",
-	Short: "Show your mail inbox (alias for 'mail inbox')",
-	RunE:  runInbox,
+	Use:        "inbox",
+	Short:      "Show your mail inbox (alias for 'mail inbox')",
+	Deprecated: "use 'gb mail inbox' instead (ported to gasboat)",
+	RunE:       runInbox,
 }
 
 // ── kd mail read ────────────────────────────────────────────────────────

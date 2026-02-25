@@ -17,8 +17,9 @@ import (
 )
 
 var yieldCmd = &cobra.Command{
-	Use:   "yield",
-	Short: "Block until a pending decision is resolved or mail arrives",
+	Use:        "yield",
+	Short:      "Block until a pending decision is resolved or mail arrives",
+	Deprecated: "use 'gb yield' instead (ported to gasboat)",
 	Long: `Blocks the agent until one of the following events occurs:
   - A pending decision bead (type=decision, status=open) is closed/resolved
   - A mail/message bead targeting this agent is created

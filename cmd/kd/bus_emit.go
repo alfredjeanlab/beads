@@ -22,9 +22,11 @@ import (
 )
 
 // busCmd is the parent command for event bus operations.
+// Deprecated: use 'gb bus' instead (ported to gasboat).
 var busCmd = &cobra.Command{
-	Use:   "bus",
-	Short: "Event bus operations",
+	Use:        "bus",
+	Short:      "Event bus operations",
+	Deprecated: "use 'gb bus' instead (ported to gasboat)",
 }
 
 // busEmitCmd emits a hook event to the server.

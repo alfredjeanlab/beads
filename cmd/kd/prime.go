@@ -16,8 +16,9 @@ import (
 )
 
 var primeCmd = &cobra.Command{
-	Use:   "prime",
-	Short: "Output AI-optimized workflow context",
+	Use:        "prime",
+	Short:      "Output AI-optimized workflow context",
+	Deprecated: "use 'gb prime' instead (ported to gasboat)",
 	Long: `Output essential kbeads workflow context in AI-optimized markdown format.
 
 Outputs 5 sections:

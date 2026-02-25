@@ -31,8 +31,9 @@ func resolveAgentBeadID(ctx context.Context) string {
 }
 
 var decisionCmd = &cobra.Command{
-	Use:   "decision",
-	Short: "Manage decision points",
+	Use:        "decision",
+	Short:      "Manage decision points",
+	Deprecated: "use 'gb decision' instead (ported to gasboat)",
 }
 
 // ── decision create ─────────────────────────────────────────────────────

@@ -13,8 +13,9 @@ import (
 )
 
 var newsCmd = &cobra.Command{
-	Use:   "news",
-	Short: "Show in-progress work by others",
+	Use:        "news",
+	Short:      "Show in-progress work by others",
+	Deprecated: "use 'gb news' instead (ported to gasboat)",
 	Long: `Show what other agents are actively working on. Use this before starting
 work to avoid conflicts and get situational awareness.
 
