@@ -125,18 +125,6 @@ func init() {
 	rootCmd.AddCommand(treeCmd)
 	rootCmd.AddCommand(adviceCmd)
 	rootCmd.AddCommand(jackCmd)
-	rootCmd.AddCommand(primeCmd)
-	rootCmd.AddCommand(readyCmd)
-	rootCmd.AddCommand(mailCmd)
-	rootCmd.AddCommand(inboxCmd)
-	rootCmd.AddCommand(decisionCmd)
-	rootCmd.AddCommand(yieldCmd)
-	rootCmd.AddCommand(busCmd)
-	rootCmd.AddCommand(gateCmd)
-	rootCmd.AddCommand(setupCmd)
-	rootCmd.AddCommand(newsCmd)
-	rootCmd.AddCommand(agentCmd)
-	rootCmd.AddCommand(hookCmd)
 
 	// System
 	rootCmd.AddCommand(serveCmd)
