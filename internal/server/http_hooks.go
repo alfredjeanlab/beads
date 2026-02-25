@@ -58,8 +58,8 @@ func (s *BeadsServer) handleHookEmit(w http.ResponseWriter, r *http.Request) {
 
 	// Evaluate strict gates for Stop hook.
 	if req.HookType == "Stop" {
-		// Upsert the decision gate for this agent (creates pending row if not exists).
-		if err := s.store.UpsertGate(ctx, req.AgentBeadID, "decision", req.ClaudeSessionID); err != nil {
+		// Upsert ensures the gate row exists in pending state (INSERT DO NOTHING).
+		if err := s.store.UpsertGate(ctx, req.AgentBeadID, "decision"); err != nil {
 			slog.Warn("hookEmit: failed to upsert decision gate", "agent", req.AgentBeadID, "err", err)
 		}
 
@@ -67,18 +67,15 @@ func (s *BeadsServer) handleHookEmit(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			slog.Warn("hookEmit: failed to check decision gate", "agent", req.AgentBeadID, "err", err)
 		}
-		if satisfied {
-			// Consume the satisfaction token: reset gate to pending so the next
-			// Stop will block again until a new decision+yield cycle completes.
-			if err := s.store.ClearGate(ctx, req.AgentBeadID, "decision"); err != nil {
-				slog.Warn("hookEmit: failed to clear decision gate", "agent", req.AgentBeadID, "err", err)
-			}
-			// Fall through to allow (block=false).
-		} else {
+		if !satisfied {
 			resp.Block = true
 			resp.Reason = "decision: decision point offered before session end"
 			writeJSON(w, http.StatusOK, resp)
 			return
+		}
+		// Gate is satisfied — consume it (reset to pending) so the next Stop blocks again.
+		if err := s.store.ClearGate(ctx, req.AgentBeadID, "decision"); err != nil {
+			slog.Warn("hookEmit: failed to clear decision gate after consume", "agent", req.AgentBeadID, "err", err)
 		}
 	}
 

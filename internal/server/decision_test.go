@@ -43,7 +43,7 @@ func newGatedStore() *gatedMockStore {
 	}
 }
 
-func (g *gatedMockStore) UpsertGate(_ context.Context, agentID, gateID, _ string) error {
+func (g *gatedMockStore) UpsertGate(_ context.Context, agentID, gateID string) error {
 	k := gateKey{agentID, gateID}
 	if _, exists := g.gates[k]; !exists {
 		g.gates[k] = &gateState{satisfied: false}

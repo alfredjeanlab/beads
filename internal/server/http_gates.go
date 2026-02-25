@@ -34,11 +34,6 @@ func (s *BeadsServer) handleSatisfyGate(w http.ResponseWriter, r *http.Request) 
 		writeError(w, http.StatusBadRequest, "id and gate_id are required")
 		return
 	}
-	// Upsert first to ensure row exists.
-	if err := s.store.UpsertGate(r.Context(), agentID, gateID, ""); err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
 	if err := s.store.MarkGateSatisfied(r.Context(), agentID, gateID); err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
