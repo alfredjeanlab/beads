@@ -61,10 +61,12 @@ var builtinConfigs = map[string]*model.Config{
 	"type:agent": {Key: "type:agent", Value: json.RawMessage(`{
 		"kind": "config",
 		"fields": [
-			{"name": "agent",   "type": "string", "required": true},
-			{"name": "role",    "type": "string", "required": true},
-			{"name": "project", "type": "string", "required": true},
-			{"name": "mode",    "type": "string"}
+			{"name": "agent",         "type": "string", "required": true},
+			{"name": "role",          "type": "string", "required": true},
+			{"name": "project",       "type": "string", "required": true},
+			{"name": "mode",          "type": "string"},
+			{"name": "agent_state",   "type": "string"},
+			{"name": "mock_scenario", "type": "string"}
 		]
 	}`)},
 	"type:decision": {Key: "type:decision", Value: json.RawMessage(`{

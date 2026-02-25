@@ -8,6 +8,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -17,6 +18,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/groblegark/kbeads/internal/client"
 	"github.com/spf13/cobra"
 )
 
@@ -72,6 +74,13 @@ func runAgentStartK8s(cmd *cobra.Command, args []string) error {
 		agent:          envOr("BOAT_AGENT", "unknown"),
 		podIP:          podIP,
 		hostname:       hostname,
+	}
+
+	// Override command for mock agents: look up mock_scenario from the
+	// type:agent config bead (best-effort — falls back to BOAT_COMMAND).
+	if mc := buildMockCommand(context.Background(), cfg.agent, cfg.project); mc != "" {
+		fmt.Printf("[kd agent start] mock agent: overriding command with claudeless scenario\n")
+		cfg.command = mc
 	}
 
 	fmt.Printf("[kd agent start] starting %s agent (mode: k8s): %s (project: %s)\n",
@@ -246,4 +255,42 @@ func orStr(s, def string) string {
 		return s
 	}
 	return def
+}
+
+// mockCommandForScenario returns the claudeless command for a given scenario name.
+func mockCommandForScenario(scenario string) string {
+	return fmt.Sprintf("claudeless --dangerously-skip-permissions --scenario /scenarios/%s.toml", scenario)
+}
+
+// buildMockCommand looks up the type:agent config bead for agentName/project
+// and returns the claudeless command if mock_scenario is set, or "" otherwise.
+// Errors are treated as "not a mock agent" (fail open).
+func buildMockCommand(ctx context.Context, agentName, project string) string {
+	if beadsClient == nil {
+		return ""
+	}
+	resp, err := beadsClient.ListBeads(ctx, &client.ListBeadsRequest{
+		Type:   []string{"agent"},
+		Status: []string{"open"},
+		Limit:  50,
+	})
+	if err != nil {
+		return ""
+	}
+	for _, b := range resp.Beads {
+		var fields struct {
+			Agent        string `json:"agent"`
+			Project      string `json:"project"`
+			MockScenario string `json:"mock_scenario"`
+		}
+		if err := json.Unmarshal(b.Fields, &fields); err != nil {
+			continue
+		}
+		if fields.Agent == agentName && (project == "" || fields.Project == project) {
+			if fields.MockScenario != "" {
+				return mockCommandForScenario(fields.MockScenario)
+			}
+		}
+	}
+	return ""
 }
