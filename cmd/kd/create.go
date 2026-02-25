@@ -8,6 +8,38 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// agentRequiredFields lists the fields the gasboat controller requires for
+// type=agent beads.  Without them the SSE-triggered spawn silently skips the
+// bead (buildEvent returns false when role=='' || name=='').
+var agentRequiredFields = []string{"agent", "role", "project"}
+
+// validateAgentFields returns an error if any required agent field is missing
+// from the provided key=value pairs.
+func validateAgentFields(pairs []string) error {
+	present := make(map[string]bool, len(pairs))
+	for _, p := range pairs {
+		k, _, ok := splitField(p)
+		if ok {
+			present[k] = true
+		}
+	}
+	var missing []string
+	for _, f := range agentRequiredFields {
+		if !present[f] {
+			missing = append(missing, f)
+		}
+	}
+	if len(missing) > 0 {
+		return fmt.Errorf(
+			"type=agent requires fields: %v\n"+
+				"provide them with -f flags, e.g.:\n"+
+				"  kd create <title> --type agent -f agent=<name> -f role=crew -f project=<project>",
+			missing,
+		)
+	}
+	return nil
+}
+
 // parseFields converts -f key=value pairs into a JSON object (bytes).
 // Values that look like JSON (start with { [ " or are true/false/null/number)
 // are embedded as-is; everything else is quoted as a string.
@@ -47,6 +79,13 @@ var createCmd = &cobra.Command{
 		owner, _ := cmd.Flags().GetString("owner")
 
 		fieldPairs, _ := cmd.Flags().GetStringArray("field")
+
+		if beadType == "agent" {
+			if err := validateAgentFields(fieldPairs); err != nil {
+				return err
+			}
+		}
+
 		fieldsJSON, err := parseFields(fieldPairs)
 		if err != nil {
 			return fmt.Errorf("parsing fields: %w", err)
