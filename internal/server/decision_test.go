@@ -6,8 +6,9 @@ package server
 //     "unknown bead type decision".
 //  2. UpdateBead merges fields instead of replacing them — kd decision respond
 //     (which only sends response_text/chosen) no longer fails "prompt: is required".
-//  3. Full decision gate flow: hook emit upserts gate, responding to a decision
-//     bead satisfies the gate and unblocks the Stop hook.
+//  3. Full decision gate flow: hook emit upserts gate, gb yield satisfies the
+//     gate (via POST /v1/agents/{id}/gates/decision/satisfy), which unblocks Stop.
+//  4. Gate is consumed on allow: after Stop is allowed, the next Stop blocks again.
 
 import (
 	"context"
@@ -28,7 +29,6 @@ type gateKey struct{ agent, gate string }
 
 type gateState struct {
 	satisfied bool
-	sessionID string
 }
 
 type gatedMockStore struct {
@@ -43,17 +43,10 @@ func newGatedStore() *gatedMockStore {
 	}
 }
 
-func (g *gatedMockStore) UpsertGate(_ context.Context, agentID, gateID, sessionID string) error {
+func (g *gatedMockStore) UpsertGate(_ context.Context, agentID, gateID, _ string) error {
 	k := gateKey{agentID, gateID}
-	st, exists := g.gates[k]
-	if !exists {
-		g.gates[k] = &gateState{satisfied: false, sessionID: sessionID}
-		return nil
-	}
-	// New non-empty session ID: reset to pending.
-	if sessionID != "" && st.sessionID != sessionID {
-		st.satisfied = false
-		st.sessionID = sessionID
+	if _, exists := g.gates[k]; !exists {
+		g.gates[k] = &gateState{satisfied: false}
 	}
 	return nil
 }
@@ -198,8 +191,9 @@ func TestUpdateDecisionFieldsMerged(t *testing.T) {
 // TestDecisionGateFlow exercises the complete decision gate lifecycle:
 //  1. POST /v1/hooks/emit with hook_type=Stop → gate is pending → blocked
 //  2. POST /v1/beads (decision) sets requesting_agent_bead_id
-//  3. POST /v1/decisions/{id}/resolve → gate is satisfied
-//  4. POST /v1/hooks/emit with hook_type=Stop → now unblocked
+//  3. POST /v1/decisions/{id}/resolve → closes decision (gate NOT yet satisfied)
+//  4. POST /v1/agents/{id}/gates/decision/satisfy → gate satisfied (simulates gb yield)
+//  5. POST /v1/hooks/emit with hook_type=Stop → now unblocked (gate consumed)
 func TestDecisionGateFlow(t *testing.T) {
 	_, gs, h := newGatedTestServer()
 
@@ -240,18 +234,29 @@ func TestDecisionGateFlow(t *testing.T) {
 		t.Fatal("gate should not be satisfied yet")
 	}
 
-	// Step 3: Resolve the decision → gate should be satisfied.
+	// Step 3: Resolve the decision. Gate is NOT satisfied by resolve — that is
+	// now gb yield's responsibility (via POST .../satisfy).
 	resolveRec := doJSON(t, h, "POST", "/v1/decisions/"+decisionID+"/resolve", map[string]any{
 		"selected_option": "y",
 		"responded_by":    "test-agent",
 	})
 	requireStatus(t, resolveRec, 200)
 
-	if st := gs.gates[gateKey{agentID, "decision"}]; st == nil || !st.satisfied {
-		t.Fatal("gate should be satisfied after decision resolved")
+	// Gate should still be pending after resolve.
+	if st := gs.gates[gateKey{agentID, "decision"}]; st != nil && st.satisfied {
+		t.Fatal("gate should not be satisfied by resolve alone")
 	}
 
-	// Step 4: Emit Stop hook again → gate is now satisfied → unblocked.
+	// Step 4: gb yield calls the satisfy endpoint after detecting the decision
+	// was resolved.
+	satisfyRec := doJSON(t, h, "POST", "/v1/agents/"+agentID+"/gates/decision/satisfy", nil)
+	requireStatus(t, satisfyRec, 200)
+
+	if st := gs.gates[gateKey{agentID, "decision"}]; st == nil || !st.satisfied {
+		t.Fatal("gate should be satisfied after satisfy endpoint called")
+	}
+
+	// Step 5: Emit Stop hook again → gate is now satisfied → unblocked (and gate consumed).
 	stopRec2 := doJSON(t, h, "POST", "/v1/hooks/emit", map[string]any{
 		"agent_bead_id":     agentID,
 		"hook_type":         "Stop",
@@ -263,13 +268,14 @@ func TestDecisionGateFlow(t *testing.T) {
 	var stopResp2 map[string]any
 	decodeJSON(t, stopRec2, &stopResp2)
 	if stopResp2["block"] == true {
-		t.Fatalf("expected unblocked on second Stop after decision resolved, got %v", stopResp2)
+		t.Fatalf("expected unblocked on Stop after gate satisfied, got %v", stopResp2)
 	}
 }
 
-// TestDecisionGateSatisfiedByClose verifies that closing a decision bead
-// (rather than using the /resolve endpoint) also satisfies the gate.
-func TestDecisionGateSatisfiedByClose(t *testing.T) {
+// TestDecisionGateNotSatisfiedByClose verifies that closing a decision bead
+// alone does NOT satisfy the gate. Gate satisfaction is now gb yield's
+// responsibility (via POST /v1/agents/{id}/gates/{gate}/satisfy).
+func TestDecisionGateNotSatisfiedByClose(t *testing.T) {
 	_, gs, h := newGatedTestServer()
 
 	const agentID = "kd-agent-close-test"
@@ -308,82 +314,61 @@ func TestDecisionGateSatisfiedByClose(t *testing.T) {
 	})
 	requireStatus(t, closeRec, 200)
 
-	if st := gs.gates[gateKey{agentID, "decision"}]; st == nil || !st.satisfied {
-		t.Fatal("gate should be satisfied after closing decision bead")
+	// Gate must still be pending after close — satisfaction is gb yield's job.
+	if st := gs.gates[gateKey{agentID, "decision"}]; st != nil && st.satisfied {
+		t.Fatal("gate must not be satisfied by close alone; gb yield must call the satisfy endpoint")
 	}
 }
 
-// TestDecisionGateCrossSessionReset verifies that a satisfied gate is reset to
-// pending when a new Claude session ID arrives on the Stop hook.
-//
-// This is the bug: UpsertGate previously used WHERE status='pending' on the
-// DO UPDATE, so a satisfied gate was never reset for a new session, causing
-// the decision checkpoint to never fire again after the first session.
-func TestDecisionGateCrossSessionReset(t *testing.T) {
-	_, gs, h := newGatedTestServer()
+// TestDecisionGateConsumed verifies the one-shot consumption model: after a
+// satisfied gate allows a Stop, the gate is reset to pending so the next Stop
+// blocks again. A new decision+yield cycle is required for every Stop.
+func TestDecisionGateConsumed(t *testing.T) {
+	_, _, h := newGatedTestServer()
 
-	const agentID = "kd-agent-cross-session"
+	const agentID = "kd-agent-consumed"
 
-	// Session 1: first Stop → gate created pending → blocked.
-	stopRec1 := doJSON(t, h, "POST", "/v1/hooks/emit", map[string]any{
-		"agent_bead_id":     agentID,
-		"hook_type":         "Stop",
-		"claude_session_id": "sess-1",
-		"actor":             "test-agent",
+	// Step 1: First Stop → gate pending → blocked.
+	stop1 := doJSON(t, h, "POST", "/v1/hooks/emit", map[string]any{
+		"agent_bead_id": agentID,
+		"hook_type":     "Stop",
+		"actor":         "test-agent",
 	})
-	requireStatus(t, stopRec1, 200)
-	var resp1 map[string]any
-	decodeJSON(t, stopRec1, &resp1)
-	if resp1["block"] != true {
-		t.Fatalf("session 1: expected block=true, got %v", resp1)
+	requireStatus(t, stop1, 200)
+	var r1 map[string]any
+	decodeJSON(t, stop1, &r1)
+	if r1["block"] != true {
+		t.Fatalf("step 1: expected block=true, got %v", r1)
 	}
 
-	// Session 1: resolve decision → gate satisfied.
-	decisionRec := doJSON(t, h, "POST", "/v1/beads", map[string]any{
-		"title": "session 1 decision",
-		"type":  "decision",
-		"kind":  "data",
-		"fields": map[string]any{
-			"prompt":                   "Proceed?",
-			"requesting_agent_bead_id": agentID,
-		},
-	})
-	requireStatus(t, decisionRec, 201)
-	var decisionBead map[string]any
-	decodeJSON(t, decisionRec, &decisionBead)
+	// Step 2: gb yield calls satisfy endpoint → gate satisfied.
+	satisfyRec := doJSON(t, h, "POST", "/v1/agents/"+agentID+"/gates/decision/satisfy", nil)
+	requireStatus(t, satisfyRec, 200)
 
-	resolveRec := doJSON(t, h, "POST", "/v1/decisions/"+decisionBead["id"].(string)+"/resolve", map[string]any{
-		"selected_option": "continue",
-		"responded_by":    "human",
+	// Step 3: Second Stop → gate satisfied → allowed, gate consumed (reset to pending).
+	stop2 := doJSON(t, h, "POST", "/v1/hooks/emit", map[string]any{
+		"agent_bead_id": agentID,
+		"hook_type":     "Stop",
+		"actor":         "test-agent",
 	})
-	requireStatus(t, resolveRec, 200)
-
-	// Session 1: second Stop → gate is satisfied → allowed.
-	stopRec2 := doJSON(t, h, "POST", "/v1/hooks/emit", map[string]any{
-		"agent_bead_id":     agentID,
-		"hook_type":         "Stop",
-		"claude_session_id": "sess-1",
-		"actor":             "test-agent",
-	})
-	requireStatus(t, stopRec2, 200)
-	var resp2 map[string]any
-	decodeJSON(t, stopRec2, &resp2)
-	if resp2["block"] == true {
-		t.Fatalf("session 1 second stop: expected unblocked, got %v", resp2)
+	requireStatus(t, stop2, 200)
+	var r2 map[string]any
+	decodeJSON(t, stop2, &r2)
+	if r2["block"] == true {
+		t.Fatalf("step 3: expected unblocked after gate satisfied, got %v", r2)
 	}
 
-	// Session 2: new session ID → gate should reset to pending → blocked again.
-	stopRec3 := doJSON(t, h, "POST", "/v1/hooks/emit", map[string]any{
-		"agent_bead_id":     agentID,
-		"hook_type":         "Stop",
-		"claude_session_id": "sess-2",
-		"actor":             "test-agent",
+	// Step 4: Third Stop → gate was consumed/reset → blocked again.
+	stop3 := doJSON(t, h, "POST", "/v1/hooks/emit", map[string]any{
+		"agent_bead_id": agentID,
+		"hook_type":     "Stop",
+		"actor":         "test-agent",
 	})
-	requireStatus(t, stopRec3, 200)
-	var resp3 map[string]any
-	decodeJSON(t, stopRec3, &resp3)
-	if resp3["block"] != true {
-		t.Fatalf("session 2: expected block=true after session reset, got %v", resp3)
+	requireStatus(t, stop3, 200)
+	var r3 map[string]any
+	decodeJSON(t, stop3, &r3)
+	if r3["block"] != true {
+		t.Fatalf("step 4: expected block=true after gate was consumed, got %v", r3)
 	}
 }
 

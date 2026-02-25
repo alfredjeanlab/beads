@@ -233,14 +233,5 @@ func (s *BeadsServer) handleCloseBead(w http.ResponseWriter, r *http.Request) {
 		ClosedBy: closedBy,
 	})
 
-	// If closing a decision bead, satisfy the requesting agent's gate.
-	if bead.Type == model.TypeDecision {
-		if agentID := decisionFieldStr(bead.Fields, "requesting_agent_bead_id"); agentID != "" {
-			if err := s.store.MarkGateSatisfied(r.Context(), agentID, "decision"); err != nil {
-				slog.Warn("failed to satisfy decision gate on close", "agent", agentID, "err", err)
-			}
-		}
-	}
-
 	writeJSON(w, http.StatusOK, bead)
 }

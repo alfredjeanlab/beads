@@ -67,7 +67,14 @@ func (s *BeadsServer) handleHookEmit(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			slog.Warn("hookEmit: failed to check decision gate", "agent", req.AgentBeadID, "err", err)
 		}
-		if !satisfied {
+		if satisfied {
+			// Consume the satisfaction token: reset gate to pending so the next
+			// Stop will block again until a new decision+yield cycle completes.
+			if err := s.store.ClearGate(ctx, req.AgentBeadID, "decision"); err != nil {
+				slog.Warn("hookEmit: failed to clear decision gate", "agent", req.AgentBeadID, "err", err)
+			}
+			// Fall through to allow (block=false).
+		} else {
 			resp.Block = true
 			resp.Reason = "decision: decision point offered before session end"
 			writeJSON(w, http.StatusOK, resp)

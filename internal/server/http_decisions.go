@@ -142,13 +142,6 @@ func (s *BeadsServer) handleResolveDecision(w http.ResponseWriter, r *http.Reque
 		ClosedBy: closedBy,
 	})
 
-	// Satisfy the requesting agent's decision gate when the decision is resolved.
-	if agentID := decisionFieldStr(bead.Fields, "requesting_agent_bead_id"); agentID != "" {
-		if err := s.store.MarkGateSatisfied(r.Context(), agentID, "decision"); err != nil {
-			slog.Warn("failed to satisfy decision gate on resolve", "agent", agentID, "err", err)
-		}
-	}
-
 	writeJSON(w, http.StatusOK, map[string]any{
 		"decision": extractDecisionFields(bead),
 		"issue":    bead,
