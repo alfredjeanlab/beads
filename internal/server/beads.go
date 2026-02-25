@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	beadsv1 "github.com/groblegark/kbeads/gen/beads/v1"
@@ -511,3 +512,44 @@ func (s *BeadsServer) DeleteBead(ctx context.Context, req *beadsv1.DeleteBeadReq
 	return &beadsv1.DeleteBeadResponse{}, nil
 }
 
+// hasReportLabel returns true if any label has the "report:" prefix.
+func hasReportLabel(labels []string) bool {
+	for _, l := range labels {
+		if strings.HasPrefix(l, "report:") {
+			return true
+		}
+	}
+	return false
+}
+
+// reportTypeFromLabels extracts the report template name from labels.
+// E.g., "report:summary" → "summary". Returns "" if no report label found.
+func reportTypeFromLabels(labels []string) string {
+	for _, l := range labels {
+		if strings.HasPrefix(l, "report:") {
+			return strings.TrimPrefix(l, "report:")
+		}
+	}
+	return ""
+}
+
+// decisionFieldStr extracts a string field from a bead's JSON fields map.
+// Returns "" if fields is empty, not a JSON object, or the key is not found.
+func decisionFieldStr(fields json.RawMessage, key string) string {
+	if len(fields) == 0 {
+		return ""
+	}
+	var m map[string]json.RawMessage
+	if err := json.Unmarshal(fields, &m); err != nil {
+		return ""
+	}
+	raw, ok := m[key]
+	if !ok {
+		return ""
+	}
+	var s string
+	if err := json.Unmarshal(raw, &s); err != nil {
+		return ""
+	}
+	return s
+}

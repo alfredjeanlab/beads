@@ -142,10 +142,15 @@ func (s *BeadsServer) handleResolveDecision(w http.ResponseWriter, r *http.Reque
 		ClosedBy: closedBy,
 	})
 
-	writeJSON(w, http.StatusOK, map[string]any{
+	resp := map[string]any{
 		"decision": extractDecisionFields(bead),
 		"issue":    bead,
-	})
+	}
+	if rt := reportTypeFromLabels(bead.Labels); rt != "" {
+		resp["report_required"] = true
+		resp["report_type"] = rt
+	}
+	writeJSON(w, http.StatusOK, resp)
 }
 
 // handleCancelDecision handles POST /v1/decisions/{id}/cancel.
@@ -243,6 +248,12 @@ func extractDecisionFields(b *model.Bead) map[string]any {
 				dec[k] = int(n)
 			}
 		}
+	}
+
+	// Report requirement derived from bead labels.
+	if rt := reportTypeFromLabels(b.Labels); rt != "" {
+		dec["report_required"] = true
+		dec["report_type"] = rt
 	}
 
 	return dec

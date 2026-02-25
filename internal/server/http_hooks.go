@@ -58,7 +58,7 @@ func (s *BeadsServer) handleHookEmit(w http.ResponseWriter, r *http.Request) {
 
 	// Evaluate strict gates for Stop hook.
 	if req.HookType == "Stop" {
-		// Upsert ensures the gate row exists in pending state (INSERT DO NOTHING).
+		// Upsert the decision gate for this agent (creates pending row if not exists).
 		if err := s.store.UpsertGate(ctx, req.AgentBeadID, "decision"); err != nil {
 			slog.Warn("hookEmit: failed to upsert decision gate", "agent", req.AgentBeadID, "err", err)
 		}
