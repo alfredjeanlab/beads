@@ -37,4 +37,4 @@ USER 1000
 WORKDIR /home/beads
 
 ENTRYPOINT ["kd"]
-CMD ["daemon", "start", "--foreground", "--tcp-addr=:9876", "--http-addr=:9877", "--log-json"]
+CMD ["serve"]
