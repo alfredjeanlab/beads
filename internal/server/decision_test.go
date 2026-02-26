@@ -186,6 +186,50 @@ func TestUpdateDecisionFieldsMerged(t *testing.T) {
 	}
 }
 
+// TestDecisionArtifactFields verifies that artifact-lifecycle fields
+// (required_artifact, artifact_status) are accepted by PATCH on a decision bead.
+func TestDecisionArtifactFields(t *testing.T) {
+	_, ms, h := newTestServer()
+
+	createRec := doJSON(t, h, "POST", "/v1/beads", map[string]any{
+		"title": "deploy?",
+		"type":  "decision",
+		"kind":  "data",
+		"fields": map[string]any{
+			"prompt": "Deploy now?",
+		},
+	})
+	requireStatus(t, createRec, 201)
+	var created map[string]any
+	decodeJSON(t, createRec, &created)
+	id := created["id"].(string)
+
+	// Simulate gb decision respond setting artifact lifecycle fields.
+	updateRec := doJSON(t, h, "PATCH", "/v1/beads/"+id, map[string]any{
+		"fields": map[string]any{
+			"chosen":            "go",
+			"required_artifact": "report",
+			"artifact_status":   "pending",
+		},
+	})
+	requireStatus(t, updateRec, 200)
+
+	bead := ms.beads[id]
+	if bead == nil {
+		t.Fatalf("bead %s not found", id)
+	}
+	var fields map[string]any
+	if err := json.Unmarshal(bead.Fields, &fields); err != nil {
+		t.Fatalf("failed to decode fields: %v", err)
+	}
+	if fields["required_artifact"] != "report" {
+		t.Errorf("required_artifact = %v, want report", fields["required_artifact"])
+	}
+	if fields["artifact_status"] != "pending" {
+		t.Errorf("artifact_status = %v, want pending", fields["artifact_status"])
+	}
+}
+
 // ── decision gate: full flow ───────────────────────────────────────────────
 
 // TestDecisionGateFlow exercises the complete decision gate lifecycle:

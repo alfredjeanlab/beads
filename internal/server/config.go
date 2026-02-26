@@ -75,12 +75,16 @@ var builtinConfigs = map[string]*model.Config{
 			{"name": "prompt",                  "type": "string", "required": true},
 			{"name": "options",                 "type": "json"},
 			{"name": "context",                 "type": "string"},
+			{"name": "session",                 "type": "string"},
 			{"name": "requested_by",            "type": "string"},
 			{"name": "requesting_agent_bead_id","type": "string"},
 			{"name": "chosen",                  "type": "string"},
+			{"name": "rationale",               "type": "string"},
 			{"name": "response_text",           "type": "string"},
 			{"name": "responded_by",            "type": "string"},
-			{"name": "responded_at",            "type": "string"}
+			{"name": "responded_at",            "type": "string"},
+			{"name": "required_artifact",       "type": "string"},
+			{"name": "artifact_status",         "type": "enum", "values": ["pending", "submitted", "accepted"]}
 		]
 	}`)},
 	"type:report": {Key: "type:report", Value: json.RawMessage(`{
