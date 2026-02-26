@@ -472,6 +472,51 @@ func TestDecisionGateManualMarkBlocked(t *testing.T) {
 	}
 }
 
+// TestDecisionGateOperatorOverride verifies that an operator using
+// 'gb gate mark decision --force' (which sets gate_satisfied_by=operator)
+// can unlock the stop gate. This covers the case where no decision bead
+// was created (operator wants to let the agent stop without a decision).
+func TestDecisionGateOperatorOverride(t *testing.T) {
+	_, gs, h := newGatedTestServer()
+
+	const agentID = "kd-agent-operator-override"
+
+	// Step 1: Stop → gate pending → blocked.
+	stop1 := doJSON(t, h, "POST", "/v1/hooks/emit", map[string]any{
+		"agent_bead_id": agentID,
+		"hook_type":     "Stop",
+		"actor":         "test-agent",
+	})
+	requireStatus(t, stop1, 200)
+	var r1 map[string]any
+	decodeJSON(t, stop1, &r1)
+	if r1["block"] != true {
+		t.Fatalf("expected block=true on first Stop, got %v", r1)
+	}
+
+	// Step 2: Operator satisfies the gate via 'gb gate mark decision --force',
+	// which calls the satisfy endpoint AND sets gate_satisfied_by=operator.
+	satisfyRec := doJSON(t, h, "POST", "/v1/agents/"+agentID+"/gates/decision/satisfy", nil)
+	requireStatus(t, satisfyRec, 200)
+	gs.beads[agentID] = &model.Bead{
+		ID:     agentID,
+		Fields: json.RawMessage(`{"gate_satisfied_by":"operator"}`),
+	}
+
+	// Step 3: Stop hook → gate satisfied AND gate_satisfied_by=operator → allowed.
+	stop2 := doJSON(t, h, "POST", "/v1/hooks/emit", map[string]any{
+		"agent_bead_id": agentID,
+		"hook_type":     "Stop",
+		"actor":         "test-agent",
+	})
+	requireStatus(t, stop2, 200)
+	var r2 map[string]any
+	decodeJSON(t, stop2, &r2)
+	if r2["block"] == true {
+		t.Fatalf("expected unblocked when gate_satisfied_by=operator, got %v", r2)
+	}
+}
+
 // ── report-gated decision flow ─────────────────────────────────────────
 
 // TestDecisionReportGatedFlow exercises the report-gated lifecycle:

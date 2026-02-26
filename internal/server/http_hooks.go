@@ -75,9 +75,10 @@ func (s *BeadsServer) handleHookEmit(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// Gate is satisfied — verify it was satisfied via 'gb yield' (not a manual mark).
-		// gb yield sets gate_satisfied_by=yield on the agent bead; gb gate mark --force sets
-		// gate_satisfied_by=manual-force. An empty or unrecognized value means the gate was
-		// satisfied without going through the proper yield flow, which breaks the Slack bridge.
+		// gb yield sets gate_satisfied_by=yield; gb gate mark --force sets gate_satisfied_by=operator
+		// (or the legacy value manual-force for backward compatibility). An empty or unrecognized
+		// value means the gate was bypassed without going through the proper yield flow, which
+		// breaks the Slack bridge.
 		agentBead, beadErr := s.store.GetBead(ctx, req.AgentBeadID)
 		var satisfiedBy string
 		if beadErr == nil && agentBead != nil && len(agentBead.Fields) > 0 {
@@ -86,7 +87,7 @@ func (s *BeadsServer) handleHookEmit(w http.ResponseWriter, r *http.Request) {
 				satisfiedBy, _ = fields["gate_satisfied_by"].(string)
 			}
 		}
-		if satisfiedBy != "yield" && satisfiedBy != "manual-force" {
+		if satisfiedBy != "yield" && satisfiedBy != "operator" && satisfiedBy != "manual-force" {
 			resp.Block = true
 			resp.Reason = "decision: gate was not satisfied via 'gb yield' — create a decision with 'gb decision create' then call 'gb yield'"
 			writeJSON(w, http.StatusOK, resp)
