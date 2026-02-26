@@ -73,9 +73,33 @@ func (s *BeadsServer) handleHookEmit(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusOK, resp)
 			return
 		}
-		// Gate is satisfied — consume it (reset to pending) so the next Stop blocks again.
+
+		// Gate is satisfied — verify it was satisfied via 'gb yield' (not a manual mark).
+		// gb yield sets gate_satisfied_by=yield on the agent bead; gb gate mark --force sets
+		// gate_satisfied_by=manual-force. An empty or unrecognized value means the gate was
+		// satisfied without going through the proper yield flow, which breaks the Slack bridge.
+		agentBead, beadErr := s.store.GetBead(ctx, req.AgentBeadID)
+		var satisfiedBy string
+		if beadErr == nil && agentBead != nil && len(agentBead.Fields) > 0 {
+			var fields map[string]any
+			if json.Unmarshal(agentBead.Fields, &fields) == nil {
+				satisfiedBy, _ = fields["gate_satisfied_by"].(string)
+			}
+		}
+		if satisfiedBy != "yield" && satisfiedBy != "manual-force" {
+			resp.Block = true
+			resp.Reason = "decision: gate was not satisfied via 'gb yield' — create a decision with 'gb decision create' then call 'gb yield'"
+			writeJSON(w, http.StatusOK, resp)
+			return
+		}
+
+		// Consume the gate (reset to pending) so the next Stop blocks again.
 		if err := s.store.ClearGate(ctx, req.AgentBeadID, "decision"); err != nil {
 			slog.Warn("hookEmit: failed to clear decision gate after consume", "agent", req.AgentBeadID, "err", err)
+		}
+		// Clear gate_satisfied_by field so it doesn't carry over to the next session.
+		if err := s.mergeBeadFields(ctx, req.AgentBeadID, map[string]any{"gate_satisfied_by": nil}); err != nil {
+			slog.Warn("hookEmit: failed to clear gate_satisfied_by field", "agent", req.AgentBeadID, "err", err)
 		}
 	}
 

@@ -292,7 +292,7 @@ func TestDecisionGateFlow(t *testing.T) {
 	}
 
 	// Step 4: gb yield calls the satisfy endpoint after detecting the decision
-	// was resolved.
+	// was resolved, and also sets gate_satisfied_by=yield on the agent bead.
 	satisfyRec := doJSON(t, h, "POST", "/v1/agents/"+agentID+"/gates/decision/satisfy", nil)
 	requireStatus(t, satisfyRec, 200)
 
@@ -300,7 +300,15 @@ func TestDecisionGateFlow(t *testing.T) {
 		t.Fatal("gate should be satisfied after satisfy endpoint called")
 	}
 
-	// Step 5: Emit Stop hook again → gate is now satisfied → unblocked (and gate consumed).
+	// Simulate gb yield setting gate_satisfied_by=yield on the agent bead.
+	// The stop hook requires this field to verify the gate was properly satisfied.
+	gs.beads[agentID] = &model.Bead{
+		ID:     agentID,
+		Fields: json.RawMessage(`{"gate_satisfied_by":"yield"}`),
+	}
+
+	// Step 5: Emit Stop hook again → gate is now satisfied AND gate_satisfied_by=yield
+	// → unblocked (and gate consumed).
 	stopRec2 := doJSON(t, h, "POST", "/v1/hooks/emit", map[string]any{
 		"agent_bead_id":     agentID,
 		"hook_type":         "Stop",
@@ -368,7 +376,7 @@ func TestDecisionGateNotSatisfiedByClose(t *testing.T) {
 // satisfied gate allows a Stop, the gate is reset to pending so the next Stop
 // blocks again. A new decision+yield cycle is required for every Stop.
 func TestDecisionGateConsumed(t *testing.T) {
-	_, _, h := newGatedTestServer()
+	_, gs, h := newGatedTestServer()
 
 	const agentID = "kd-agent-consumed"
 
@@ -385,11 +393,17 @@ func TestDecisionGateConsumed(t *testing.T) {
 		t.Fatalf("step 1: expected block=true, got %v", r1)
 	}
 
-	// Step 2: gb yield calls satisfy endpoint → gate satisfied.
+	// Step 2: gb yield calls satisfy endpoint AND sets gate_satisfied_by=yield.
 	satisfyRec := doJSON(t, h, "POST", "/v1/agents/"+agentID+"/gates/decision/satisfy", nil)
 	requireStatus(t, satisfyRec, 200)
+	// Simulate gb yield setting gate_satisfied_by=yield on the agent bead.
+	gs.beads[agentID] = &model.Bead{
+		ID:     agentID,
+		Fields: json.RawMessage(`{"gate_satisfied_by":"yield"}`),
+	}
 
-	// Step 3: Second Stop → gate satisfied → allowed, gate consumed (reset to pending).
+	// Step 3: Second Stop → gate satisfied AND gate_satisfied_by=yield → allowed,
+	// gate consumed (reset to pending) and field cleared.
 	stop2 := doJSON(t, h, "POST", "/v1/hooks/emit", map[string]any{
 		"agent_bead_id": agentID,
 		"hook_type":     "Stop",
@@ -413,6 +427,48 @@ func TestDecisionGateConsumed(t *testing.T) {
 	decodeJSON(t, stop3, &r3)
 	if r3["block"] != true {
 		t.Fatalf("step 4: expected block=true after gate was consumed, got %v", r3)
+	}
+}
+
+// TestDecisionGateManualMarkBlocked verifies that satisfying the decision gate
+// via the satisfy endpoint WITHOUT setting gate_satisfied_by=yield on the agent
+// bead still results in a block. The stop hook requires the marker field to
+// confirm the gate was properly satisfied via 'gb yield'.
+func TestDecisionGateManualMarkBlocked(t *testing.T) {
+	_, _, h := newGatedTestServer()
+
+	const agentID = "kd-agent-manual-mark"
+
+	// Step 1: Stop → gate pending → blocked.
+	stop1 := doJSON(t, h, "POST", "/v1/hooks/emit", map[string]any{
+		"agent_bead_id": agentID,
+		"hook_type":     "Stop",
+		"actor":         "test-agent",
+	})
+	requireStatus(t, stop1, 200)
+	var r1 map[string]any
+	decodeJSON(t, stop1, &r1)
+	if r1["block"] != true {
+		t.Fatalf("expected block=true on first Stop, got %v", r1)
+	}
+
+	// Step 2: Satisfy the gate directly (simulates 'gb gate mark decision')
+	// WITHOUT setting gate_satisfied_by on the agent bead.
+	satisfyRec := doJSON(t, h, "POST", "/v1/agents/"+agentID+"/gates/decision/satisfy", nil)
+	requireStatus(t, satisfyRec, 200)
+
+	// Step 3: Stop hook → gate is satisfied BUT gate_satisfied_by is missing
+	// → must still block (manual mark, not a real yield).
+	stop2 := doJSON(t, h, "POST", "/v1/hooks/emit", map[string]any{
+		"agent_bead_id": agentID,
+		"hook_type":     "Stop",
+		"actor":         "test-agent",
+	})
+	requireStatus(t, stop2, 200)
+	var r2 map[string]any
+	decodeJSON(t, stop2, &r2)
+	if r2["block"] != true {
+		t.Fatalf("expected block=true when gate_satisfied_by is missing, got %v", r2)
 	}
 }
 
@@ -478,12 +534,19 @@ func TestDecisionReportGatedFlow(t *testing.T) {
 		t.Fatal("gate should NOT be satisfied after resolve (gb yield must call satisfy)")
 	}
 
-	// Step 4: gb yield calls the satisfy endpoint after report workflow completes.
+	// Step 4: gb yield calls the satisfy endpoint after report workflow completes,
+	// and sets gate_satisfied_by=yield on the agent bead.
 	satisfyRec := doJSON(t, h, "POST", "/v1/agents/"+agentID+"/gates/decision/satisfy", nil)
 	requireStatus(t, satisfyRec, 200)
 
 	if st := gs.gates[gateKey{agentID, "decision"}]; st == nil || !st.satisfied {
 		t.Fatal("gate should be satisfied after satisfy endpoint called")
+	}
+
+	// Simulate gb yield setting gate_satisfied_by=yield on the agent bead.
+	gs.beads[agentID] = &model.Bead{
+		ID:     agentID,
+		Fields: json.RawMessage(`{"gate_satisfied_by":"yield"}`),
 	}
 
 	// Step 5: Stop hook should now be unblocked.
