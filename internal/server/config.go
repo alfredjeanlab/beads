@@ -66,7 +66,9 @@ var builtinConfigs = map[string]*model.Config{
 			{"name": "project",       "type": "string", "required": true},
 			{"name": "mode",          "type": "string"},
 			{"name": "agent_state",   "type": "string"},
-			{"name": "mock_scenario", "type": "string"}
+			{"name": "mock_scenario", "type": "string"},
+			{"name": "advice_subscriptions",         "type": "string[]"},
+			{"name": "advice_subscriptions_exclude",  "type": "string[]"}
 		]
 	}`)},
 	"type:decision": {Key: "type:decision", Value: json.RawMessage(`{

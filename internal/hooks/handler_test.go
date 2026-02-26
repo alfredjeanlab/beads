@@ -15,9 +15,13 @@ import (
 type mockStore struct {
 	store.Store // embed to satisfy the full interface
 	beads       []*model.Bead
+	agentBeads  []*model.Bead // returned when querying type=agent
 }
 
-func (m *mockStore) ListBeads(_ context.Context, _ model.BeadFilter) ([]*model.Bead, int, error) {
+func (m *mockStore) ListBeads(_ context.Context, f model.BeadFilter) ([]*model.Bead, int, error) {
+	if len(f.Type) > 0 && f.Type[0] == model.BeadType("agent") {
+		return m.agentBeads, len(m.agentBeads), nil
+	}
 	return m.beads, len(m.beads), nil
 }
 
@@ -30,6 +34,17 @@ func makeAdvice(id, title string, labels []string, fields map[string]any) *model
 		Title:  title,
 		Status: model.StatusOpen,
 		Labels: labels,
+		Fields: b,
+	}
+}
+
+func makeAgentBead(id, agentName string, fields map[string]any) *model.Bead {
+	b, _ := json.Marshal(fields)
+	return &model.Bead{
+		ID:     id,
+		Type:   model.BeadType("agent"),
+		Title:  agentName,
+		Status: model.StatusOpen,
 		Fields: b,
 	}
 }
@@ -139,6 +154,82 @@ func TestHandleSessionEvent_WrongTriggerSkipped(t *testing.T) {
 	})
 	if resp.Block {
 		t.Error("expected no block when trigger doesn't match")
+	}
+}
+
+func TestHandleSessionEvent_AdviceSubscriptionsExtra(t *testing.T) {
+	// Advice bead labeled "security" — only matches if agent subscribes to it.
+	s := &mockStore{
+		beads: []*model.Bead{
+			makeAdvice("kd-10", "security advice", []string{"security"}, map[string]any{
+				"hook_command":    "echo secure",
+				"hook_trigger":    TriggerSessionEnd,
+				"hook_on_failure": OnFailureBlock,
+			}),
+		},
+		agentBeads: []*model.Bead{
+			makeAgentBead("kd-a1", "test-agent", map[string]any{
+				"agent":                "test-agent",
+				"role":                 "crew",
+				"project":             "beads",
+				"advice_subscriptions": []string{"security"},
+			}),
+		},
+	}
+	h := NewHandler(s, slog.New(slog.NewTextHandler(os.Stderr, nil)))
+
+	// Agent with advice_subscriptions=["security"] — should match.
+	resp := h.HandleSessionEvent(context.Background(), SessionEvent{
+		AgentID: "beads/crew/test-agent",
+		Trigger: TriggerSessionEnd,
+	})
+	if resp.Block {
+		t.Error("expected no block for matching advice_subscriptions (command succeeds)")
+	}
+
+	// Without agent bead (no custom subs) — should NOT match "security" label.
+	s2 := &mockStore{
+		beads: s.beads,
+		// no agentBeads
+	}
+	h2 := NewHandler(s2, slog.New(slog.NewTextHandler(os.Stderr, nil)))
+	resp = h2.HandleSessionEvent(context.Background(), SessionEvent{
+		AgentID: "beads/crew/test-agent",
+		Trigger: TriggerSessionEnd,
+	})
+	if resp.Block {
+		t.Error("expected no block when agent has no custom subscriptions")
+	}
+}
+
+func TestHandleSessionEvent_AdviceSubscriptionsExclude(t *testing.T) {
+	// Global advice — normally matches all agents.
+	s := &mockStore{
+		beads: []*model.Bead{
+			makeAdvice("kd-11", "global advice", []string{"global"}, map[string]any{
+				"hook_command":    "exit 1",
+				"hook_trigger":    TriggerSessionEnd,
+				"hook_on_failure": OnFailureBlock,
+			}),
+		},
+		agentBeads: []*model.Bead{
+			makeAgentBead("kd-a2", "test-agent", map[string]any{
+				"agent":                        "test-agent",
+				"role":                         "crew",
+				"project":                      "beads",
+				"advice_subscriptions_exclude": []string{"global"},
+			}),
+		},
+	}
+	h := NewHandler(s, slog.New(slog.NewTextHandler(os.Stderr, nil)))
+
+	// Agent excludes "global" — should NOT match global advice.
+	resp := h.HandleSessionEvent(context.Background(), SessionEvent{
+		AgentID: "beads/crew/test-agent",
+		Trigger: TriggerSessionEnd,
+	})
+	if resp.Block {
+		t.Error("expected no block when agent excludes 'global' subscription")
 	}
 }
 

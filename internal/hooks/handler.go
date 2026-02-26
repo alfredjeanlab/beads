@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"strings"
 
 	"github.com/groblegark/kbeads/internal/events"
 	"github.com/groblegark/kbeads/internal/model"
@@ -91,8 +92,9 @@ func (h *Handler) HandleSessionEvent(ctx context.Context, event SessionEvent) Ho
 		return resp
 	}
 
-	// Build agent subscriptions for matching.
+	// Build agent subscriptions for matching, enriched with agent bead config.
 	agentSubs := model.BuildAgentSubscriptions(event.AgentID, nil)
+	agentSubs = h.enrichAgentSubscriptions(ctx, event.AgentID, agentSubs)
 
 	for _, bead := range beads {
 		fields, err := parseAdviceFields(bead.Fields)
@@ -135,6 +137,54 @@ func (h *Handler) HandleSessionEvent(ctx context.Context, event SessionEvent) Ho
 	}
 
 	return resp
+}
+
+// enrichAgentSubscriptions looks up the agent bead and adds/removes custom
+// advice subscriptions from the agent's configuration fields.
+func (h *Handler) enrichAgentSubscriptions(ctx context.Context, agentID string, subs []string) []string {
+	parts := strings.Split(agentID, "/")
+	agentName := parts[len(parts)-1]
+
+	agentBeads, _, err := h.store.ListBeads(ctx, model.BeadFilter{
+		Type:   []model.BeadType{"agent"},
+		Status: []model.Status{model.StatusOpen, model.StatusInProgress},
+		Fields: map[string]string{"agent": agentName},
+		Limit:  1,
+	})
+	if err != nil {
+		h.logger.Warn("hooks: failed to look up agent bead for advice subscriptions", "agent_id", agentID, "err", err)
+		return subs
+	}
+	if len(agentBeads) == 0 {
+		return subs
+	}
+
+	var af struct {
+		AdviceSubscriptions        []string `json:"advice_subscriptions"`
+		AdviceSubscriptionsExclude []string `json:"advice_subscriptions_exclude"`
+	}
+	if err := json.Unmarshal(agentBeads[0].Fields, &af); err != nil {
+		h.logger.Warn("hooks: failed to parse agent fields for advice subscriptions", "agent_id", agentID, "err", err)
+		return subs
+	}
+
+	subs = append(subs, af.AdviceSubscriptions...)
+
+	if len(af.AdviceSubscriptionsExclude) > 0 {
+		excludeSet := make(map[string]bool, len(af.AdviceSubscriptionsExclude))
+		for _, exc := range af.AdviceSubscriptionsExclude {
+			excludeSet[exc] = true
+		}
+		filtered := subs[:0]
+		for _, sub := range subs {
+			if !excludeSet[sub] {
+				filtered = append(filtered, sub)
+			}
+		}
+		subs = filtered
+	}
+
+	return subs
 }
 
 // StartSubscriber listens for session lifecycle events on the event bus and
