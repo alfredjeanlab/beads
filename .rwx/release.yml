@@ -283,17 +283,10 @@ tasks:
       TAG="${TAG#refs/heads/}"
 
       echo "Dispatching to gasboat for agent rebuild (kd: $TAG)..."
-      curl -fsSL -X POST https://api.rwx.com/v1/dispatches \
+      curl -fsSL -X POST https://cloud.rwx.com/mint/api/runs/dispatches \
         -H "Authorization: Bearer $RWX_ACCESS_TOKEN" \
         -H "Content-Type: application/json" \
-        -d "{
-          \"repository\": \"gasboat\",
-          \"workflow\": \"gasboat-agent-rebuild\",
-          \"parameters\": {
-            \"trigger-source\": \"kbeads-release-$TAG\",
-            \"kd-version\": \"$TAG\"
-          }
-        }"
+        -d "{\"key\": \"gasboat-agent-rebuild\", \"params\": {\"trigger-source\": \"kbeads-release-$TAG\", \"kd-version\": \"$TAG\"}, \"ref\": \"main\", \"title\": \"Agent rebuild (kd $TAG)\"}"
     env:
       RWX_ACCESS_TOKEN: ${{ secrets.RWX_ACCESS_TOKEN }}
       REF_NAME: ${{ init.ref-name }}
