@@ -32,8 +32,8 @@ func validateAgentFields(pairs []string) error {
 	if len(missing) > 0 {
 		return fmt.Errorf(
 			"type=agent requires fields: %v\n"+
-				"provide them with -f flags, e.g.:\n"+
-				"  kd create <title> --type agent -f agent=<name> -f role=crew -f project=<project>",
+				"provide them with -f flags (or --role for the role field), e.g.:\n"+
+				"  kd create <title> --type agent --role crew -f agent=<name> -f project=<project>",
 			missing,
 		)
 	}
@@ -77,8 +77,28 @@ var createCmd = &cobra.Command{
 		labels, _ := cmd.Flags().GetStringSlice("label")
 		assignee, _ := cmd.Flags().GetString("assignee")
 		owner, _ := cmd.Flags().GetString("owner")
+		role, _ := cmd.Flags().GetString("role")
 
 		fieldPairs, _ := cmd.Flags().GetStringArray("field")
+
+		if role != "" {
+			labels = append(labels, "role:"+role)
+			// For agent beads, --role also satisfies the required "role" field
+			// so the user doesn't need to pass both --role and -f role=<value>.
+			if beadType == "agent" {
+				hasRoleField := false
+				for _, p := range fieldPairs {
+					k, _, ok := splitField(p)
+					if ok && k == "role" {
+						hasRoleField = true
+						break
+					}
+				}
+				if !hasRoleField {
+					fieldPairs = append(fieldPairs, "role="+role)
+				}
+			}
+		}
 
 		if beadType == "agent" {
 			if err := validateAgentFields(fieldPairs); err != nil {
@@ -126,5 +146,6 @@ func init() {
 	createCmd.Flags().StringSliceP("label", "l", nil, "labels (repeatable)")
 	createCmd.Flags().String("assignee", "", "assignee")
 	createCmd.Flags().String("owner", "", "owner")
+	createCmd.Flags().String("role", "", "role label to assign (adds role:<value> label; for --type agent also sets the role field)")
 	createCmd.Flags().StringArrayP("field", "f", nil, "typed field (key=value, repeatable)")
 }
