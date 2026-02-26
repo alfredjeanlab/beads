@@ -201,6 +201,38 @@ func queryListBeads(ctx context.Context, db executor, filter model.BeadFilter) (
 		return nil, 0, fmt.Errorf("scan beads: %w", err)
 	}
 
+	// Populate labels for all returned beads in one query.
+	if len(beads) > 0 {
+		idPlaceholders := make([]string, len(beads))
+		labelArgs := make([]any, len(beads))
+		for i, b := range beads {
+			idPlaceholders[i] = fmt.Sprintf("$%d", i+1)
+			labelArgs[i] = b.ID
+		}
+		labelRows, err := db.QueryContext(ctx,
+			"SELECT bead_id, label FROM labels WHERE bead_id IN ("+strings.Join(idPlaceholders, ", ")+")",
+			labelArgs...)
+		if err != nil {
+			return nil, 0, fmt.Errorf("list beads labels: %w", err)
+		}
+		defer labelRows.Close()
+
+		labelMap := make(map[string][]string, len(beads))
+		for labelRows.Next() {
+			var beadID, label string
+			if err := labelRows.Scan(&beadID, &label); err != nil {
+				return nil, 0, fmt.Errorf("scan bead label: %w", err)
+			}
+			labelMap[beadID] = append(labelMap[beadID], label)
+		}
+		if err := labelRows.Err(); err != nil {
+			return nil, 0, fmt.Errorf("list beads labels: %w", err)
+		}
+		for _, b := range beads {
+			b.Labels = labelMap[b.ID] // nil if no labels (same as before for unlabelled beads)
+		}
+	}
+
 	return beads, total, nil
 }
 

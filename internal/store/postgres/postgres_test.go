@@ -616,6 +616,17 @@ func TestQueryListBeads(t *testing.T) {
 			}
 			eq.WillReturnRows(r)
 
+			// queryListBeads now fetches labels in a second query for non-empty results.
+			if tc.wantCount > 0 {
+				labelArgs := make([]driver.Value, tc.wantCount)
+				for i := range tc.wantCount {
+					labelArgs[i] = fmt.Sprintf("kd-%d", i+1)
+				}
+				mock.ExpectQuery("SELECT bead_id, label FROM labels WHERE bead_id IN").
+					WithArgs(labelArgs...).
+					WillReturnRows(sqlmock.NewRows([]string{"bead_id", "label"}))
+			}
+
 			beads, total, err := queryListBeads(context.Background(), db, tc.filter)
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
@@ -753,10 +764,17 @@ func TestQueryGetGraph(t *testing.T) {
 	mock.ExpectQuery("SELECT COUNT\\(\\*\\) OVER\\(\\) AS total_count, .+ FROM beads").
 		WillReturnRows(beadRows)
 
-	// 2. Labels query.
-	labelRows := sqlmock.NewRows([]string{"bead_id", "label"}).
+	// 2a. Labels-IN query from queryListBeads (new: fetches labels for the returned bead IDs).
+	listLabelRows := sqlmock.NewRows([]string{"bead_id", "label"}).
 		AddRow("kd-g1", "urgent")
-	mock.ExpectQuery("SELECT bead_id, label FROM labels").WillReturnRows(labelRows)
+	mock.ExpectQuery("SELECT bead_id, label FROM labels WHERE bead_id IN").
+		WithArgs(driver.Value("kd-g1"), driver.Value("kd-g2")).
+		WillReturnRows(listLabelRows)
+
+	// 2b. Labels-ALL query from queryGetGraph (fetches all labels to merge into nodes).
+	allLabelRows := sqlmock.NewRows([]string{"bead_id", "label"}).
+		AddRow("kd-g1", "urgent")
+	mock.ExpectQuery("SELECT bead_id, label FROM labels").WillReturnRows(allLabelRows)
 
 	// 3. Deps query.
 	depRows := sqlmock.NewRows([]string{"bead_id", "depends_on_id", "type", "created_at", "created_by", "metadata"}).
