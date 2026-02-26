@@ -9,6 +9,11 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var (
+	listProjectFlag     string
+	listAllProjectsFlag bool
+)
+
 var listCmd = &cobra.Command{
 	Use:     "list",
 	Short:   "List beads",
@@ -33,6 +38,10 @@ var listCmd = &cobra.Command{
 			Offset:     offset,
 			NoOpenDeps: noBlockers,
 			Sort:       sort,
+		}
+
+		if !listAllProjectsFlag && listProjectFlag != "" {
+			req.Labels = append(req.Labels, "project:"+listProjectFlag)
 		}
 
 		if len(fieldFlags) > 0 {
@@ -71,4 +80,6 @@ func init() {
 	listCmd.Flags().StringArrayP("field", "f", nil, "filter by custom field (key=value, repeatable)")
 	listCmd.Flags().Bool("no-blockers", false, "only show beads with no open/in_progress/deferred dependencies")
 	listCmd.Flags().String("sort", "", "sort column: priority, created_at, updated_at, title, status, type (prefix with - for descending, e.g. -priority)")
+	listCmd.Flags().StringVar(&listProjectFlag, "project", os.Getenv("BOAT_PROJECT"), "filter by project label (default: $BOAT_PROJECT)")
+	listCmd.Flags().BoolVar(&listAllProjectsFlag, "all-projects", false, "show beads from all projects (disables project filter)")
 }
