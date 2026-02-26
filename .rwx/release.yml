@@ -95,6 +95,7 @@ tasks:
     filter:
       - .rwx/release.yml
       - "**/*.go"
+      - "**/*.sql"
       - go.mod
       - go.sum
       - "!**/*_test.go"
@@ -124,6 +125,7 @@ tasks:
     filter:
       - .rwx/release.yml
       - "**/*.go"
+      - "**/*.sql"
       - go.mod
       - go.sum
       - "!**/*_test.go"
@@ -156,6 +158,7 @@ tasks:
     filter:
       - .rwx/release.yml
       - "**/*.go"
+      - "**/*.sql"
       - go.mod
       - go.sum
       - "!**/*_test.go"
