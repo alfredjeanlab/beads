@@ -156,6 +156,7 @@ func TestBuildAgentSubscriptions(t *testing.T) {
 		"agent:beads/polecats/quartz": true,
 		"rig:beads":       true,
 		"role:polecats":   true,
+		"role:polecat":    true,
 	}
 
 	for _, s := range subs {
