@@ -67,6 +67,7 @@ var builtinConfigs = map[string]*model.Config{
 			{"name": "mode",          "type": "string"},
 			{"name": "agent_state",   "type": "string"},
 			{"name": "mock_scenario", "type": "string"},
+			{"name": "stop_requested",    "type": "string"},
 			{"name": "gate_satisfied_by", "type": "string"},
 			{"name": "advice_subscriptions",         "type": "string[]"},
 			{"name": "advice_subscriptions_exclude",  "type": "string[]"}
