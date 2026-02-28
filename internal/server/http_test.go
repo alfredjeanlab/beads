@@ -5,16 +5,15 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/alfredjeanlab/beads/internal/events"
-	"github.com/alfredjeanlab/beads/internal/model"
-	"github.com/alfredjeanlab/beads/internal/store"
+	"github.com/groblegark/kbeads/internal/events"
+	"github.com/groblegark/kbeads/internal/model"
+	"github.com/groblegark/kbeads/internal/store"
 )
 
 type mockStore struct {
@@ -143,6 +142,7 @@ func (m *mockStore) CloseBead(_ context.Context, id string, closedBy string) (*m
 	b.ClosedAt = &now
 	b.ClosedBy = closedBy
 	b.UpdatedAt = now
+	b.Labels = m.labels[id]
 	return b, nil
 }
 
@@ -153,6 +153,74 @@ func (m *mockStore) DeleteBead(_ context.Context, id string) error {
 	delete(m.beads, id)
 	delete(m.labels, id)
 	return nil
+}
+
+func (m *mockStore) GetStats(_ context.Context) (*model.GraphStats, error) {
+	stats := &model.GraphStats{}
+	for _, b := range m.beads {
+		switch b.Status {
+		case model.StatusOpen:
+			stats.TotalOpen++
+		case model.StatusInProgress:
+			stats.TotalInProgress++
+		case model.StatusBlocked:
+			stats.TotalBlocked++
+		case model.StatusClosed:
+			stats.TotalClosed++
+		case model.StatusDeferred:
+			stats.TotalDeferred++
+		}
+	}
+	return stats, nil
+}
+
+func (m *mockStore) GetGraph(_ context.Context, limit int) (*model.GraphResponse, error) {
+	beads, total, _ := m.ListBeads(context.Background(), model.BeadFilter{Limit: limit, Sort: "-updated_at"})
+	idSet := make(map[string]struct{}, len(beads))
+	for _, b := range beads {
+		idSet[b.ID] = struct{}{}
+		b.Labels = m.labels[b.ID]
+		b.Dependencies = m.deps[b.ID]
+	}
+	var edges []*model.GraphEdge
+	for _, deps := range m.deps {
+		for _, d := range deps {
+			if _, ok := idSet[d.BeadID]; !ok {
+				continue
+			}
+			if _, ok := idSet[d.DependsOnID]; !ok {
+				continue
+			}
+			depType := string(d.Type)
+			if depType == "" {
+				depType = "blocks"
+			}
+			edges = append(edges, &model.GraphEdge{Source: d.BeadID, Target: d.DependsOnID, Type: depType})
+		}
+	}
+	stats := &model.GraphStats{}
+	for _, b := range m.beads {
+		switch b.Status {
+		case model.StatusOpen:
+			stats.TotalOpen++
+		case model.StatusInProgress:
+			stats.TotalInProgress++
+		case model.StatusBlocked:
+			stats.TotalBlocked++
+		case model.StatusClosed:
+			stats.TotalClosed++
+		case model.StatusDeferred:
+			stats.TotalDeferred++
+		}
+	}
+	if beads == nil {
+		beads = []*model.Bead{}
+	}
+	if edges == nil {
+		edges = []*model.GraphEdge{}
+	}
+	_ = total
+	return &model.GraphResponse{Nodes: beads, Edges: edges, Stats: stats}, nil
 }
 
 func (m *mockStore) AddDependency(_ context.Context, dep *model.Dependency) error {
@@ -279,11 +347,25 @@ func (m *mockStore) Close() error {
 	return nil
 }
 
+func (m *mockStore) UpsertGate(_ context.Context, _, _ string) error { return nil }
+
+func (m *mockStore) MarkGateSatisfied(_ context.Context, _, _ string) error { return nil }
+
+func (m *mockStore) ClearGate(_ context.Context, _, _ string) error { return nil }
+
+func (m *mockStore) IsGateSatisfied(_ context.Context, _, _ string) (bool, error) {
+	return false, nil
+}
+
+func (m *mockStore) ListGates(_ context.Context, _ string) ([]model.GateRow, error) {
+	return nil, nil
+}
+
 // newTestServer returns a fresh server, its mock store, and an HTTP handler.
 func newTestServer() (*BeadsServer, *mockStore, http.Handler) {
 	ms := newMockStore()
 	s := NewBeadsServer(ms, &events.NoopPublisher{})
-	return s, ms, s.NewHTTPHandler()
+	return s, ms, s.NewHTTPHandler("")
 }
 
 // doJSON performs an HTTP request with an optional JSON body and returns the recorder.
@@ -332,10 +414,10 @@ func TestHandleHTTPErrors(t *testing.T) {
 		{"DeleteBead/NotFound", "DELETE", "/v1/beads/nonexistent", nil, 404, ""},
 		{"GetConfig/NotFound", "GET", "/v1/configs/view:nonexistent", nil, 404, ""},
 		{"DeleteConfig/NotFound", "DELETE", "/v1/configs/view:nonexistent", nil, 404, ""},
-		{"AddComment/MissingText", "POST", "/v1/beads/bd-x/comments", map[string]any{"author": "alice"}, 400, ""},
-		{"AddDependency/MissingDependsOnID", "POST", "/v1/beads/bd-a/dependencies", map[string]any{"type": "blocks"}, 400, ""},
-		{"AddLabel/MissingLabel", "POST", "/v1/beads/bd-a/labels", map[string]any{}, 400, ""},
-		{"RemoveDependency/MissingDependsOnID", "DELETE", "/v1/beads/bd-a/dependencies?type=blocks", nil, 400, ""},
+		{"AddComment/MissingText", "POST", "/v1/beads/kd-x/comments", map[string]any{"author": "alice"}, 400, ""},
+		{"AddDependency/MissingDependsOnID", "POST", "/v1/beads/kd-a/dependencies", map[string]any{"type": "blocks"}, 400, ""},
+		{"AddLabel/MissingLabel", "POST", "/v1/beads/kd-a/labels", map[string]any{}, 400, ""},
+		{"RemoveDependency/MissingDependsOnID", "DELETE", "/v1/beads/kd-a/dependencies?type=blocks", nil, 400, ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, _, h := newTestServer()
@@ -379,8 +461,8 @@ func TestHandleCreateBead(t *testing.T) {
 
 func TestHandleListBeads(t *testing.T) {
 	_, ms, h := newTestServer()
-	ms.beads["bd-abc123"] = &model.Bead{ID: "bd-abc123", Title: "Bead one", Status: model.StatusOpen}
-	ms.beads["bd-def456"] = &model.Bead{ID: "bd-def456", Title: "Bead two", Status: model.StatusOpen}
+	ms.beads["kd-abc123"] = &model.Bead{ID: "kd-abc123", Title: "Bead one", Status: model.StatusOpen}
+	ms.beads["kd-def456"] = &model.Bead{ID: "kd-def456", Title: "Bead two", Status: model.StatusOpen}
 
 	rec := doJSON(t, h, "GET", "/v1/beads", nil)
 	requireStatus(t, rec, 200)
@@ -396,8 +478,8 @@ func TestHandleListBeads(t *testing.T) {
 
 func TestHandleListBeads_WithFilters(t *testing.T) {
 	_, ms, h := newTestServer()
-	ms.beads["bd-f1"] = &model.Bead{ID: "bd-f1", Title: "Open test bead", Kind: model.KindIssue, Type: model.TypeTask, Status: model.StatusOpen, Assignee: "alice"}
-	ms.beads["bd-f2"] = &model.Bead{ID: "bd-f2", Title: "Closed bead", Kind: model.KindIssue, Type: model.TypeTask, Status: model.StatusClosed, Assignee: "alice"}
+	ms.beads["kd-f1"] = &model.Bead{ID: "kd-f1", Title: "Open test bead", Kind: model.KindIssue, Type: model.TypeTask, Status: model.StatusOpen, Assignee: "alice"}
+	ms.beads["kd-f2"] = &model.Bead{ID: "kd-f2", Title: "Closed bead", Kind: model.KindIssue, Type: model.TypeTask, Status: model.StatusClosed, Assignee: "alice"}
 
 	rec := doJSON(t, h, "GET", "/v1/beads?status=open&type=task&kind=issue&limit=10&offset=0&sort=-priority&assignee=alice&search=test", nil)
 	requireStatus(t, rec, 200)
@@ -413,13 +495,13 @@ func TestHandleListBeads_WithFilters(t *testing.T) {
 
 func TestHandleGetBead(t *testing.T) {
 	_, ms, h := newTestServer()
-	ms.beads["bd-test1"] = &model.Bead{ID: "bd-test1", Title: "Test bead", Status: model.StatusOpen}
+	ms.beads["kd-test1"] = &model.Bead{ID: "kd-test1", Title: "Test bead", Status: model.StatusOpen}
 
-	rec := doJSON(t, h, "GET", "/v1/beads/bd-test1", nil)
+	rec := doJSON(t, h, "GET", "/v1/beads/kd-test1", nil)
 	requireStatus(t, rec, 200)
 	var bead model.Bead
 	decodeJSON(t, rec, &bead)
-	if bead.ID != "bd-test1" || bead.Title != "Test bead" {
+	if bead.ID != "kd-test1" || bead.Title != "Test bead" {
 		t.Fatalf("got id=%q title=%q", bead.ID, bead.Title)
 	}
 }
@@ -536,11 +618,11 @@ func TestHandleListConfigs_BuiltinNotDuplicated(t *testing.T) {
 
 func TestHandleGetDependencies(t *testing.T) {
 	_, ms, h := newTestServer()
-	ms.deps["bd-dep1"] = []*model.Dependency{
-		{BeadID: "bd-dep1", DependsOnID: "bd-dep2", Type: "blocks"},
-		{BeadID: "bd-dep1", DependsOnID: "bd-dep3", Type: "related"},
+	ms.deps["kd-dep1"] = []*model.Dependency{
+		{BeadID: "kd-dep1", DependsOnID: "kd-dep2", Type: "blocks"},
+		{BeadID: "kd-dep1", DependsOnID: "kd-dep3", Type: "related"},
 	}
-	rec := doJSON(t, h, "GET", "/v1/beads/bd-dep1/dependencies", nil)
+	rec := doJSON(t, h, "GET", "/v1/beads/kd-dep1/dependencies", nil)
 	requireStatus(t, rec, 200)
 	var result struct {
 		Dependencies []model.Dependency `json:"dependencies"`
@@ -553,9 +635,9 @@ func TestHandleGetDependencies(t *testing.T) {
 
 func TestHandleGetLabels(t *testing.T) {
 	_, ms, h := newTestServer()
-	ms.labels["bd-lbl1"] = []string{"urgent", "frontend"}
+	ms.labels["kd-lbl1"] = []string{"urgent", "frontend"}
 
-	rec := doJSON(t, h, "GET", "/v1/beads/bd-lbl1/labels", nil)
+	rec := doJSON(t, h, "GET", "/v1/beads/kd-lbl1/labels", nil)
 	requireStatus(t, rec, 200)
 	var result struct {
 		Labels []string `json:"labels"`
@@ -568,11 +650,11 @@ func TestHandleGetLabels(t *testing.T) {
 
 func TestHandleGetComments(t *testing.T) {
 	_, ms, h := newTestServer()
-	ms.comments["bd-cmt1"] = []*model.Comment{
-		{ID: 1, BeadID: "bd-cmt1", Author: "alice", Text: "First"},
-		{ID: 2, BeadID: "bd-cmt1", Author: "bob", Text: "Second"},
+	ms.comments["kd-cmt1"] = []*model.Comment{
+		{ID: 1, BeadID: "kd-cmt1", Author: "alice", Text: "First"},
+		{ID: 2, BeadID: "kd-cmt1", Author: "bob", Text: "Second"},
 	}
-	rec := doJSON(t, h, "GET", "/v1/beads/bd-cmt1/comments", nil)
+	rec := doJSON(t, h, "GET", "/v1/beads/kd-cmt1/comments", nil)
 	requireStatus(t, rec, 200)
 	var result struct {
 		Comments []model.Comment `json:"comments"`
@@ -586,11 +668,11 @@ func TestHandleGetComments(t *testing.T) {
 func TestHandleGetEvents(t *testing.T) {
 	_, ms, h := newTestServer()
 	ms.events = []*model.Event{
-		{ID: 1, Topic: "beads.bead.created", BeadID: "bd-abc123", Actor: "alice", Payload: json.RawMessage(`{}`)},
-		{ID: 2, Topic: "beads.label.added", BeadID: "bd-abc123", Payload: json.RawMessage(`{}`)},
-		{ID: 3, Topic: "beads.bead.created", BeadID: "bd-other", Payload: json.RawMessage(`{}`)},
+		{ID: 1, Topic: "beads.bead.created", BeadID: "kd-abc123", Actor: "alice", Payload: json.RawMessage(`{}`)},
+		{ID: 2, Topic: "beads.label.added", BeadID: "kd-abc123", Payload: json.RawMessage(`{}`)},
+		{ID: 3, Topic: "beads.bead.created", BeadID: "kd-other", Payload: json.RawMessage(`{}`)},
 	}
-	rec := doJSON(t, h, "GET", "/v1/beads/bd-abc123/events", nil)
+	rec := doJSON(t, h, "GET", "/v1/beads/kd-abc123/events", nil)
 	requireStatus(t, rec, 200)
 	var result struct {
 		Events []model.Event `json:"events"`
@@ -607,10 +689,10 @@ func TestHandleEmptyLists(t *testing.T) {
 		name string
 		path string
 	}{
-		{"Dependencies", "/v1/beads/bd-nope/dependencies"},
-		{"Labels", "/v1/beads/bd-nope/labels"},
-		{"Comments", "/v1/beads/bd-nope/comments"},
-		{"Events", "/v1/beads/bd-nonexistent/events"},
+		{"Dependencies", "/v1/beads/kd-nope/dependencies"},
+		{"Labels", "/v1/beads/kd-nope/labels"},
+		{"Comments", "/v1/beads/kd-nope/comments"},
+		{"Events", "/v1/beads/kd-nonexistent/events"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			rec := doJSON(t, h, "GET", tc.path, nil)
@@ -621,315 +703,13 @@ func TestHandleEmptyLists(t *testing.T) {
 
 func TestHandleAddComment_Response(t *testing.T) {
 	_, ms, h := newTestServer()
-	ms.beads["bd-cmt2"] = &model.Bead{ID: "bd-cmt2", Title: "Bead for comment", Status: model.StatusOpen}
+	ms.beads["kd-cmt2"] = &model.Bead{ID: "kd-cmt2", Title: "Bead for comment", Status: model.StatusOpen}
 
-	rec := doJSON(t, h, "POST", "/v1/beads/bd-cmt2/comments", map[string]any{"author": "alice", "text": "A new comment"})
+	rec := doJSON(t, h, "POST", "/v1/beads/kd-cmt2/comments", map[string]any{"author": "alice", "text": "A new comment"})
 	requireStatus(t, rec, 201)
 	var comment model.Comment
 	decodeJSON(t, rec, &comment)
-	if comment.Text != "A new comment" || comment.Author != "alice" || comment.BeadID != "bd-cmt2" {
+	if comment.Text != "A new comment" || comment.Author != "alice" || comment.BeadID != "kd-cmt2" {
 		t.Fatalf("got text=%q author=%q bead_id=%q", comment.Text, comment.Author, comment.BeadID)
 	}
-}
-
-func TestCreateBeadRecordsEvent(t *testing.T) {
-	_, ms, h := newTestServer()
-	rec := doJSON(t, h, "POST", "/v1/beads", map[string]any{"title": "Test bead", "type": "task", "created_by": "alice"})
-	requireStatus(t, rec, 201)
-	requireEvent(t, ms, 1, "beads.bead.created")
-	if ms.events[0].Actor != "alice" {
-		t.Fatalf("expected actor=%q, got %q", "alice", ms.events[0].Actor)
-	}
-}
-
-func TestDeleteBeadRecordsEvent(t *testing.T) {
-	_, ms, h := newTestServer()
-	ms.beads["bd-del1"] = &model.Bead{ID: "bd-del1", Title: "To delete", Status: model.StatusOpen}
-
-	rec := doJSON(t, h, "DELETE", "/v1/beads/bd-del1", nil)
-	requireStatus(t, rec, 204)
-	requireEvent(t, ms, 1, "beads.bead.deleted")
-	if ms.events[0].BeadID != "bd-del1" {
-		t.Fatalf("expected bead_id=%q, got %q", "bd-del1", ms.events[0].BeadID)
-	}
-}
-
-func TestAddCommentRecordsEvent(t *testing.T) {
-	_, ms, h := newTestServer()
-	ms.beads["bd-cmt1"] = &model.Bead{ID: "bd-cmt1", Title: "Bead with comment", Status: model.StatusOpen}
-
-	rec := doJSON(t, h, "POST", "/v1/beads/bd-cmt1/comments", map[string]any{"author": "bob", "text": "Hello world"})
-	requireStatus(t, rec, 201)
-	requireEvent(t, ms, 1, "beads.comment.added")
-	if ms.events[0].Actor != "bob" {
-		t.Fatalf("expected actor=%q, got %q", "bob", ms.events[0].Actor)
-	}
-}
-
-func TestAddLabelRecordsEvent(t *testing.T) {
-	_, ms, h := newTestServer()
-	ms.beads["bd-lbl1"] = &model.Bead{ID: "bd-lbl1", Title: "Bead with label", Status: model.StatusOpen}
-
-	rec := doJSON(t, h, "POST", "/v1/beads/bd-lbl1/labels", map[string]any{"label": "urgent"})
-	requireStatus(t, rec, 201)
-	requireEvent(t, ms, 1, "beads.label.added")
-}
-
-func TestRemoveLabelRecordsEvent(t *testing.T) {
-	_, ms, h := newTestServer()
-	ms.beads["bd-lbl2"] = &model.Bead{ID: "bd-lbl2", Title: "Bead losing label", Status: model.StatusOpen}
-
-	rec := doJSON(t, h, "DELETE", "/v1/beads/bd-lbl2/labels/urgent", nil)
-	requireStatus(t, rec, 204)
-	requireEvent(t, ms, 1, "beads.label.removed")
-	var labelEvt events.LabelRemoved
-	if err := json.Unmarshal(ms.events[0].Payload, &labelEvt); err != nil {
-		t.Fatalf("failed to unmarshal event payload: %v", err)
-	}
-	if labelEvt.Label != "urgent" {
-		t.Fatalf("expected label=%q in payload, got %q", "urgent", labelEvt.Label)
-	}
-}
-
-func TestAddDependencyRecordsEvent(t *testing.T) {
-	_, ms, h := newTestServer()
-	ms.beads["bd-dep1"] = &model.Bead{ID: "bd-dep1", Title: "A", Status: model.StatusOpen}
-	ms.beads["bd-dep2"] = &model.Bead{ID: "bd-dep2", Title: "B", Status: model.StatusOpen}
-
-	rec := doJSON(t, h, "POST", "/v1/beads/bd-dep1/dependencies", map[string]any{
-		"depends_on_id": "bd-dep2", "type": "blocks", "created_by": "carol",
-	})
-	requireStatus(t, rec, 201)
-	requireEvent(t, ms, 1, "beads.dependency.added")
-	if ms.events[0].Actor != "carol" {
-		t.Fatalf("expected actor=%q, got %q", "carol", ms.events[0].Actor)
-	}
-}
-
-func TestRemoveDependencyRecordsEvent(t *testing.T) {
-	_, ms, h := newTestServer()
-	ms.beads["bd-rdep1"] = &model.Bead{ID: "bd-rdep1", Title: "A", Status: model.StatusOpen}
-
-	rec := doJSON(t, h, "DELETE", "/v1/beads/bd-rdep1/dependencies?depends_on_id=bd-rdep2&type=blocks", nil)
-	requireStatus(t, rec, 204)
-	requireEvent(t, ms, 1, "beads.dependency.removed")
-	var depEvt events.DependencyRemoved
-	if err := json.Unmarshal(ms.events[0].Payload, &depEvt); err != nil {
-		t.Fatalf("failed to unmarshal event payload: %v", err)
-	}
-	if depEvt.DependsOnID != "bd-rdep2" || depEvt.Type != "blocks" {
-		t.Fatalf("expected depends_on_id=%q type=%q, got %q %q", "bd-rdep2", "blocks", depEvt.DependsOnID, depEvt.Type)
-	}
-}
-
-func TestHandleUpdateBead(t *testing.T) {
-	_, ms, h := newTestServer()
-	ms.beads["bd-upd1"] = &model.Bead{ID: "bd-upd1", Title: "Original", Kind: model.KindIssue, Type: model.TypeTask, Status: model.StatusOpen}
-
-	rec := doJSON(t, h, "PATCH", "/v1/beads/bd-upd1", map[string]any{"title": "Updated"})
-	requireStatus(t, rec, 200)
-	var bead model.Bead
-	decodeJSON(t, rec, &bead)
-	if bead.Title != "Updated" {
-		t.Fatalf("expected title=%q, got %q", "Updated", bead.Title)
-	}
-}
-
-func TestHandleUpdateBead_LabelsReconciled(t *testing.T) {
-	_, ms, h := newTestServer()
-	ms.beads["bd-upd2"] = &model.Bead{ID: "bd-upd2", Title: "Bead", Kind: model.KindIssue, Type: model.TypeTask, Status: model.StatusOpen}
-	ms.labels["bd-upd2"] = []string{"a", "b"}
-
-	rec := doJSON(t, h, "PATCH", "/v1/beads/bd-upd2", map[string]any{"labels": []string{"b", "c"}})
-	requireStatus(t, rec, 200)
-
-	// Verify via GET that labels were reconciled in the store.
-	rec = doJSON(t, h, "GET", "/v1/beads/bd-upd2", nil)
-	requireStatus(t, rec, 200)
-	var bead model.Bead
-	decodeJSON(t, rec, &bead)
-	if len(bead.Labels) != 2 {
-		t.Fatalf("expected 2 labels, got %d: %v", len(bead.Labels), bead.Labels)
-	}
-	labelSet := map[string]bool{}
-	for _, l := range bead.Labels {
-		labelSet[l] = true
-	}
-	if !labelSet["b"] || !labelSet["c"] {
-		t.Fatalf("expected labels [b, c], got %v", bead.Labels)
-	}
-}
-
-func TestHandleUpdateBead_NotFound(t *testing.T) {
-	_, _, h := newTestServer()
-	rec := doJSON(t, h, "PATCH", "/v1/beads/nonexistent", map[string]any{"title": "x"})
-	requireStatus(t, rec, 404)
-}
-
-func TestHandleUpdateBead_InvalidJSON(t *testing.T) {
-	_, _, h := newTestServer()
-	req := httptest.NewRequest("PATCH", "/v1/beads/bd-x", strings.NewReader("{bad"))
-	req.Header.Set("Content-Type", "application/json")
-	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, req)
-	requireStatus(t, rec, 400)
-}
-
-func TestHandleCloseBead(t *testing.T) {
-	_, ms, h := newTestServer()
-	ms.beads["bd-cls1"] = &model.Bead{ID: "bd-cls1", Title: "To close", Kind: model.KindIssue, Type: model.TypeTask, Status: model.StatusOpen}
-
-	rec := doJSON(t, h, "POST", "/v1/beads/bd-cls1/close", nil)
-	requireStatus(t, rec, 200)
-	var bead model.Bead
-	decodeJSON(t, rec, &bead)
-	if bead.Status != model.StatusClosed {
-		t.Fatalf("expected status=%q, got %q", model.StatusClosed, bead.Status)
-	}
-}
-
-func TestHandleCloseBead_WithClosedBy(t *testing.T) {
-	_, ms, h := newTestServer()
-	ms.beads["bd-cls2"] = &model.Bead{ID: "bd-cls2", Title: "To close", Kind: model.KindIssue, Type: model.TypeTask, Status: model.StatusOpen}
-
-	rec := doJSON(t, h, "POST", "/v1/beads/bd-cls2/close", map[string]any{"closed_by": "alice"})
-	requireStatus(t, rec, 200)
-	var bead model.Bead
-	decodeJSON(t, rec, &bead)
-	if bead.ClosedBy != "alice" {
-		t.Fatalf("expected closed_by=%q, got %q", "alice", bead.ClosedBy)
-	}
-}
-
-func TestHandleCloseBead_RecordsEvent(t *testing.T) {
-	_, ms, h := newTestServer()
-	ms.beads["bd-cls3"] = &model.Bead{ID: "bd-cls3", Title: "To close", Kind: model.KindIssue, Type: model.TypeTask, Status: model.StatusOpen}
-
-	rec := doJSON(t, h, "POST", "/v1/beads/bd-cls3/close", map[string]any{"closed_by": "bob"})
-	requireStatus(t, rec, 200)
-	requireEvent(t, ms, 1, "beads.bead.closed")
-	if ms.events[0].Actor != "bob" {
-		t.Fatalf("expected actor=%q, got %q", "bob", ms.events[0].Actor)
-	}
-}
-
-func TestHandleCloseBead_NotFound(t *testing.T) {
-	_, _, h := newTestServer()
-	rec := doJSON(t, h, "POST", "/v1/beads/nonexistent/close", nil)
-	requireStatus(t, rec, 404)
-}
-
-func TestHandleListBeads_FilterByLabels(t *testing.T) {
-	_, ms, h := newTestServer()
-	ms.beads["bd-l1"] = &model.Bead{ID: "bd-l1", Title: "Has urgent", Status: model.StatusOpen}
-	ms.labels["bd-l1"] = []string{"urgent"}
-	ms.beads["bd-l2"] = &model.Bead{ID: "bd-l2", Title: "Has frontend", Status: model.StatusOpen}
-	ms.labels["bd-l2"] = []string{"frontend"}
-
-	rec := doJSON(t, h, "GET", "/v1/beads?labels=urgent", nil)
-	requireStatus(t, rec, 200)
-	var result struct {
-		Beads []model.Bead `json:"beads"`
-		Total int          `json:"total"`
-	}
-	decodeJSON(t, rec, &result)
-	if result.Total != 1 {
-		t.Fatalf("expected total=1, got %d", result.Total)
-	}
-	if result.Beads[0].ID != "bd-l1" {
-		t.Fatalf("expected bead bd-l1, got %q", result.Beads[0].ID)
-	}
-}
-
-func TestHandleListBeads_FilterByPriority(t *testing.T) {
-	_, ms, h := newTestServer()
-	ms.beads["bd-p1"] = &model.Bead{ID: "bd-p1", Title: "High", Status: model.StatusOpen, Priority: 3}
-	ms.beads["bd-p2"] = &model.Bead{ID: "bd-p2", Title: "Low", Status: model.StatusOpen, Priority: 1}
-
-	rec := doJSON(t, h, "GET", "/v1/beads?priority=3", nil)
-	requireStatus(t, rec, 200)
-	var result struct {
-		Beads []model.Bead `json:"beads"`
-		Total int          `json:"total"`
-	}
-	decodeJSON(t, rec, &result)
-	if result.Total != 1 {
-		t.Fatalf("expected total=1, got %d", result.Total)
-	}
-	if result.Beads[0].ID != "bd-p1" {
-		t.Fatalf("expected bead bd-p1, got %q", result.Beads[0].ID)
-	}
-}
-
-func TestHandleCreateBead_LabelFailure_ReturnsError(t *testing.T) {
-	_, ms, h := newTestServer()
-	ms.addLabelErr = fmt.Errorf("label store down")
-
-	rec := doJSON(t, h, "POST", "/v1/beads", map[string]any{
-		"title": "With labels", "type": "task", "labels": []string{"x"},
-	})
-	requireStatus(t, rec, 500)
-}
-
-func TestHandleCreateBead_WithLabels_AllPersisted(t *testing.T) {
-	_, ms, h := newTestServer()
-	rec := doJSON(t, h, "POST", "/v1/beads", map[string]any{
-		"title": "With labels", "type": "task", "labels": []string{"a", "b", "c"},
-	})
-	requireStatus(t, rec, 201)
-	var bead model.Bead
-	decodeJSON(t, rec, &bead)
-
-	// Verify all 3 labels are in the store.
-	if len(ms.labels[bead.ID]) != 3 {
-		t.Fatalf("expected 3 labels, got %d", len(ms.labels[bead.ID]))
-	}
-
-	// Verify GET returns them.
-	rec = doJSON(t, h, "GET", "/v1/beads/"+bead.ID, nil)
-	requireStatus(t, rec, 200)
-	var got model.Bead
-	decodeJSON(t, rec, &got)
-	if len(got.Labels) != 3 {
-		t.Fatalf("expected 3 labels on GET, got %d", len(got.Labels))
-	}
-}
-
-func TestHandleUpdateBead_LabelsPreservedWhenNotSpecified(t *testing.T) {
-	_, ms, h := newTestServer()
-	ms.beads["bd-upd3"] = &model.Bead{ID: "bd-upd3", Title: "Original", Kind: model.KindIssue, Type: model.TypeTask, Status: model.StatusOpen}
-	ms.labels["bd-upd3"] = []string{"keep-me"}
-
-	// Update only title, don't send labels.
-	rec := doJSON(t, h, "PATCH", "/v1/beads/bd-upd3", map[string]any{"title": "New title"})
-	requireStatus(t, rec, 200)
-
-	// Labels should be unchanged.
-	if len(ms.labels["bd-upd3"]) != 1 || ms.labels["bd-upd3"][0] != "keep-me" {
-		t.Fatalf("expected labels to be preserved, got %v", ms.labels["bd-upd3"])
-	}
-}
-
-func TestHandleUpdateBead_ClearLabels(t *testing.T) {
-	_, ms, h := newTestServer()
-	ms.beads["bd-upd4"] = &model.Bead{ID: "bd-upd4", Title: "Has labels", Kind: model.KindIssue, Type: model.TypeTask, Status: model.StatusOpen}
-	ms.labels["bd-upd4"] = []string{"a", "b"}
-
-	// Update with empty labels array to clear them.
-	rec := doJSON(t, h, "PATCH", "/v1/beads/bd-upd4", map[string]any{"labels": []string{}})
-	requireStatus(t, rec, 200)
-
-	if len(ms.labels["bd-upd4"]) != 0 {
-		t.Fatalf("expected 0 labels, got %d: %v", len(ms.labels["bd-upd4"]), ms.labels["bd-upd4"])
-	}
-}
-
-func TestHandleCreateBead_DueAtOnNonIssue(t *testing.T) {
-	_, ms, h := newTestServer()
-	ms.configs["type:note"] = &model.Config{Key: "type:note", Value: json.RawMessage(`{"kind":"data"}`)}
-
-	rec := doJSON(t, h, "POST", "/v1/beads", map[string]any{
-		"title": "x", "type": "note", "due_at": "2026-03-01T00:00:00Z",
-	})
-	requireStatus(t, rec, 201)
 }

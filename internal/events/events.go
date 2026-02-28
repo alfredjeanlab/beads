@@ -3,7 +3,7 @@ package events
 import (
 	"context"
 
-	"github.com/alfredjeanlab/beads/internal/model"
+	"github.com/groblegark/kbeads/internal/model"
 )
 
 // Event topic constants
@@ -17,6 +17,23 @@ const (
 	TopicLabelAdded        = "beads.label.added"
 	TopicLabelRemoved      = "beads.label.removed"
 	TopicCommentAdded      = "beads.comment.added"
+
+	// Advice events
+	TopicAdviceCreated = "beads.advice.created"
+	TopicAdviceUpdated = "beads.advice.updated"
+	TopicAdviceDeleted = "beads.advice.deleted"
+
+	// Session lifecycle events (emitted by agents, consumed by hooks handler).
+	TopicSessionEnd       = "beads.session.end"
+	TopicSessionPreCommit = "beads.session.pre_commit"
+	TopicSessionPrePush   = "beads.session.pre_push"
+	TopicSessionHandoff   = "beads.session.handoff"
+
+	// Jack events
+	TopicJackOn = "beads.jack.on"
+	TopicJackOff      = "beads.jack.off"
+	TopicJackExtended = "beads.jack.extended"
+	TopicJackExpired  = "beads.jack.expired"
 )
 
 // Event types
@@ -61,6 +78,42 @@ type LabelRemoved struct {
 
 type CommentAdded struct {
 	Comment *model.Comment `json:"comment"`
+}
+
+// Advice events
+
+type AdviceCreated struct {
+	Bead *model.Bead `json:"bead"`
+}
+
+type AdviceUpdated struct {
+	Bead    *model.Bead    `json:"bead"`
+	Changes map[string]any `json:"changes"`
+}
+
+type AdviceDeleted struct {
+	BeadID string `json:"bead_id"`
+}
+
+// Jack events
+
+type JackOn struct {
+	Bead *model.Bead `json:"bead"`
+}
+
+type JackOff struct {
+	Bead   *model.Bead `json:"bead"`
+	Reason string      `json:"reason"`
+}
+
+type JackExtended struct {
+	Bead *model.Bead `json:"bead"`
+	TTL  string      `json:"ttl"`
+}
+
+type JackExpired struct {
+	BeadID string `json:"bead_id"`
+	Target string `json:"target"`
 }
 
 // Publisher is the interface for emitting events.
