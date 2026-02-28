@@ -6,6 +6,12 @@ on:
     tags: ["v*"]
   pull_request:
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Tag to publish as a release (e.g. v0.3.11). Runs release job when set.'
+        required: false
+        type: string
 
 permissions:
   contents: write
@@ -34,9 +40,27 @@ jobs:
           version: v1.64.8
           install-mode: goinstall
 
+  quench:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+      - name: Install quench
+        run: cargo install quench --git https://github.com/alfredjeanlab/quench
+      - name: Run quench checks
+        run: quench check
+
   binaries:
-    if: startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/main'
-    needs: [test, lint]
+    if: startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+    needs: [test]
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -63,6 +87,8 @@ jobs:
         run: |
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
             echo "version=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+          elif [[ -n "${{ inputs.version }}" ]]; then
+            echo "version=${{ inputs.version }}" >> "$GITHUB_OUTPUT"
           else
             echo "version=nightly-$(date -u +%Y%m%d)-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
           fi
@@ -74,16 +100,16 @@ jobs:
         run: |
           go build \
             -ldflags="-s -w -X main.Version=${{ steps.ver.outputs.version }} -X main.Build=${GITHUB_SHA::7}" \
-            -o bd \
-            ./cmd/bd
-          tar -czf bd-${{ matrix.goos }}-${{ matrix.arch }}.tar.gz bd
+            -o kd \
+            ./cmd/kd
+          tar -czf kd-${{ matrix.goos }}-${{ matrix.arch }}.tar.gz kd
       - uses: actions/upload-artifact@v4
         with:
-          name: bd-${{ matrix.goos }}-${{ matrix.arch }}
-          path: bd-${{ matrix.goos }}-${{ matrix.arch }}.tar.gz
+          name: kd-${{ matrix.goos }}-${{ matrix.arch }}
+          path: kd-${{ matrix.goos }}-${{ matrix.arch }}.tar.gz
 
   release:
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.version != '')
     needs: [binaries]
     runs-on: ubuntu-latest
     steps:
@@ -91,15 +117,31 @@ jobs:
         with:
           path: artifacts
           merge-multiple: true
+      - name: Determine release tag
+        id: tag
+        run: |
+          if [[ -n "${{ inputs.version }}" ]]; then
+            echo "name=${{ inputs.version }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "name=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+          fi
       - uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ steps.tag.outputs.name }}
           files: artifacts/*
           generate_release_notes: true
+      - name: Trigger gasboat agent rebuild
+        run: |
+          gh workflow run bump-kd.yml \
+            -R groblegark/gasboat \
+            -f version=${{ steps.tag.outputs.name }}
+        env:
+          GH_TOKEN: ${{ secrets.GASBOAT_DISPATCH_TOKEN }}
 
   docker:
     name: Docker (${{ matrix.arch }})
-    if: startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/main'
-    needs: [test, lint]
+    if: startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+    needs: [test]
     runs-on: ${{ matrix.runner }}
     strategy:
       matrix:
@@ -129,6 +171,7 @@ jobs:
             type=semver,pattern={{version}},suffix=-${{ matrix.arch }}
             type=semver,pattern={{major}}.{{minor}},suffix=-${{ matrix.arch }}
             type=raw,value=nightly-${{ matrix.arch }},enable={{is_default_branch}}
+            type=raw,value=${{ inputs.version != '' && format('{0}-{1}', inputs.version, matrix.arch) || '' }},enable=${{ inputs.version != '' }}
       - uses: docker/build-push-action@v6
         with:
           context: .
@@ -144,7 +187,7 @@ jobs:
 
   manifest:
     name: Manifest
-    if: startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/main'
+    if: startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
     needs: [docker]
     runs-on: ubuntu-latest
     steps:
@@ -164,6 +207,7 @@ jobs:
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=raw,value=nightly,enable={{is_default_branch}}
+            type=raw,value=${{ inputs.version }},enable=${{ inputs.version != '' }}
       - name: Create multi-arch manifests
         run: |
           while IFS= read -r TAG; do

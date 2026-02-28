@@ -6,8 +6,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/alfredjeanlab/beads/internal/model"
-	"github.com/alfredjeanlab/beads/internal/store"
+	"github.com/groblegark/kbeads/internal/model"
+	"github.com/groblegark/kbeads/internal/store"
 )
 
 // mockStore is a minimal in-memory store for sync tests.
@@ -65,6 +65,14 @@ func (m *mockStore) CloseBead(_ context.Context, _ string, _ string) (*model.Bea
 func (m *mockStore) DeleteBead(_ context.Context, id string) error {
 	delete(m.beads, id)
 	return nil
+}
+
+func (m *mockStore) GetGraph(_ context.Context, _ int) (*model.GraphResponse, error) {
+	return &model.GraphResponse{Nodes: []*model.Bead{}, Edges: []*model.GraphEdge{}, Stats: &model.GraphStats{}}, nil
+}
+
+func (m *mockStore) GetStats(_ context.Context) (*model.GraphStats, error) {
+	return &model.GraphStats{}, nil
 }
 
 func (m *mockStore) AddDependency(_ context.Context, dep *model.Dependency) error {
@@ -156,4 +164,18 @@ func (m *mockStore) RunInTransaction(_ context.Context, fn func(tx store.Store) 
 
 func (m *mockStore) Close() error {
 	return nil
+}
+
+func (m *mockStore) UpsertGate(_ context.Context, _, _ string) error { return nil }
+
+func (m *mockStore) MarkGateSatisfied(_ context.Context, _, _ string) error { return nil }
+
+func (m *mockStore) ClearGate(_ context.Context, _, _ string) error { return nil }
+
+func (m *mockStore) IsGateSatisfied(_ context.Context, _, _ string) (bool, error) {
+	return false, nil
+}
+
+func (m *mockStore) ListGates(_ context.Context, _ string) ([]model.GateRow, error) {
+	return nil, nil
 }

@@ -4,28 +4,45 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"sync"
 	"time"
 
-	beadsv1 "github.com/alfredjeanlab/beads/gen/beads/v1"
-	"github.com/alfredjeanlab/beads/internal/events"
-	"github.com/alfredjeanlab/beads/internal/model"
-	"github.com/alfredjeanlab/beads/internal/store"
+	beadsv1 "github.com/groblegark/kbeads/gen/beads/v1"
+	"github.com/groblegark/kbeads/internal/events"
+	"github.com/groblegark/kbeads/internal/hooks"
+	"github.com/groblegark/kbeads/internal/model"
+	"github.com/groblegark/kbeads/internal/presence"
+	"github.com/groblegark/kbeads/internal/store"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
 
+// stopGateFailOpenThreshold is the number of consecutive blocked stop attempts
+// before the gate fails open and allows the agent through.
+const stopGateFailOpenThreshold = 3
+
 // BeadsServer implements the beadsv1.BeadsServiceServer interface.
 type BeadsServer struct {
 	beadsv1.UnimplementedBeadsServiceServer
-	store     store.Store
-	publisher events.Publisher
+	store        store.Store
+	publisher    events.Publisher
+	sseHub       *sseHub
+	hooksHandler *hooks.Handler
+	Presence     *presence.Tracker
+
+	stopMu       sync.Mutex
+	stopAttempts map[string]int // agent bead ID → consecutive blocked stop attempts
 }
 
 // NewBeadsServer returns a new BeadsServer backed by the given store and publisher.
 func NewBeadsServer(s store.Store, p events.Publisher) *BeadsServer {
 	return &BeadsServer{
-		store:     s,
-		publisher: p,
+		store:        s,
+		publisher:    p,
+		sseHub:       newSSEHub(),
+		hooksHandler: hooks.NewHandler(s, slog.Default()),
+		Presence:     presence.New(),
+		stopAttempts: make(map[string]int),
 	}
 }
 
@@ -48,6 +65,7 @@ func (s *BeadsServer) recordAndPublish(ctx context.Context, topic, beadID, actor
 	if err := s.publisher.Publish(ctx, topic, event); err != nil {
 		slog.Warn("failed to publish event", "topic", topic, "bead_id", beadID, "error", err)
 	}
+	s.broadcastEvent(topic, event)
 }
 
 // inputError indicates invalid user input.

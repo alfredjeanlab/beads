@@ -6,13 +6,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
-	beadsv1 "github.com/alfredjeanlab/beads/gen/beads/v1"
-	"github.com/alfredjeanlab/beads/internal/events"
-	"github.com/alfredjeanlab/beads/internal/idgen"
-	"github.com/alfredjeanlab/beads/internal/model"
-	"github.com/alfredjeanlab/beads/internal/store"
+	beadsv1 "github.com/groblegark/kbeads/gen/beads/v1"
+	"github.com/groblegark/kbeads/internal/events"
+	"github.com/groblegark/kbeads/internal/idgen"
+	"github.com/groblegark/kbeads/internal/model"
+	"github.com/groblegark/kbeads/internal/store"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -106,6 +107,10 @@ func (s *BeadsServer) createBead(ctx context.Context, in createBeadInput) (*mode
 	}
 
 	s.recordAndPublish(ctx, events.TopicBeadCreated, bead.ID, bead.CreatedBy, events.BeadCreated{Bead: bead})
+
+	if bead.Type == model.TypeAdvice {
+		s.recordAndPublish(ctx, events.TopicAdviceCreated, bead.ID, bead.CreatedBy, events.AdviceCreated{Bead: bead})
+	}
 
 	return bead, nil
 }
@@ -283,7 +288,22 @@ func (s *BeadsServer) updateBead(ctx context.Context, id string, in updateBeadIn
 	}
 
 	if in.Fields != nil {
-		bead.Fields = in.Fields
+		// Merge incoming fields into existing fields (patch semantics).
+		existing := make(map[string]any)
+		if len(bead.Fields) > 0 {
+			_ = json.Unmarshal(bead.Fields, &existing)
+		}
+		var patch map[string]any
+		if err := json.Unmarshal(in.Fields, &patch); err == nil {
+			for k, v := range patch {
+				existing[k] = v
+			}
+		}
+		merged, mergeErr := json.Marshal(existing)
+		if mergeErr != nil {
+			return nil, fmt.Errorf("failed to merge fields: %w", mergeErr)
+		}
+		bead.Fields = merged
 		changes["fields"] = bead.Fields
 	}
 	if in.labelsSet {
@@ -336,6 +356,13 @@ func (s *BeadsServer) updateBead(ctx context.Context, id string, in updateBeadIn
 		Bead:    bead,
 		Changes: changes,
 	})
+
+	if bead.Type == model.TypeAdvice {
+		s.recordAndPublish(ctx, events.TopicAdviceUpdated, bead.ID, "", events.AdviceUpdated{
+			Bead:    bead,
+			Changes: changes,
+		})
+	}
 
 	return bead, nil
 }
@@ -456,6 +483,10 @@ func (s *BeadsServer) CloseBead(ctx context.Context, req *beadsv1.CloseBeadReque
 		ClosedBy: req.GetClosedBy(),
 	})
 
+	if bead.Type == model.TypeAdvice {
+		s.recordAndPublish(ctx, events.TopicAdviceDeleted, bead.ID, req.GetClosedBy(), events.AdviceDeleted{BeadID: bead.ID})
+	}
+
 	return &beadsv1.CloseBeadResponse{Bead: beadToProto(bead)}, nil
 }
 
@@ -480,3 +511,15 @@ func (s *BeadsServer) DeleteBead(ctx context.Context, req *beadsv1.DeleteBeadReq
 
 	return &beadsv1.DeleteBeadResponse{}, nil
 }
+
+// reportTypeFromLabels extracts the report template name from labels.
+// E.g., "report:summary" → "summary". Returns "" if no report label found.
+func reportTypeFromLabels(labels []string) string {
+	for _, l := range labels {
+		if strings.HasPrefix(l, "report:") {
+			return strings.TrimPrefix(l, "report:")
+		}
+	}
+	return ""
+}
+
