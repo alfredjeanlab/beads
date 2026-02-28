@@ -132,10 +132,10 @@ func checkProjectMatch(ctx context.Context, beadID string) error {
 	return nil
 }
 
-// agentProject returns the agent's project name from the BOAT_PROJECT env var,
-// or by parsing the first component of BEADS_AGENT_NAME (e.g., "gasboat/gb-zeta" → "gasboat").
+// agentProject returns the agent's project name.
+// Precedence: KD_PROJECT > BOAT_PROJECT > first component of BEADS_AGENT_NAME.
 func agentProject() string {
-	if p := os.Getenv("BOAT_PROJECT"); p != "" {
+	if p := defaultProject(); p != "" {
 		return p
 	}
 	if name := os.Getenv("BEADS_AGENT_NAME"); name != "" {

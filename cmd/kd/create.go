@@ -3,9 +3,15 @@ package main
 import (
 	"context"
 	"fmt"
+	"os"
 
 	"github.com/groblegark/kbeads/internal/client"
 	"github.com/spf13/cobra"
+)
+
+var (
+	createProjectFlag string
+	createForceFlag   bool
 )
 
 // agentRequiredFields lists the fields the gasboat controller requires for
@@ -100,6 +106,16 @@ var createCmd = &cobra.Command{
 			}
 		}
 
+		// Add project label from --project flag or default.
+		if createProjectFlag != "" {
+			// Cross-project guard: if BOAT_PROJECT is set (agent env) and --project
+			// differs, require --force to prevent agents filing beads in the wrong project.
+			if agentProj := os.Getenv("BOAT_PROJECT"); agentProj != "" && createProjectFlag != agentProj && !createForceFlag {
+				return fmt.Errorf("--project %q differs from agent project %q — use --force to override", createProjectFlag, agentProj)
+			}
+			labels = append(labels, "project:"+createProjectFlag)
+		}
+
 		if beadType == "agent" {
 			if err := validateAgentFields(fieldPairs); err != nil {
 				return err
@@ -148,4 +164,6 @@ func init() {
 	createCmd.Flags().String("owner", "", "owner")
 	createCmd.Flags().String("role", "", "role label to assign (adds role:<value> label; for --type agent also sets the role field)")
 	createCmd.Flags().StringArrayP("field", "f", nil, "typed field (key=value, repeatable)")
+	createCmd.Flags().StringVar(&createProjectFlag, "project", defaultProject(), "add project:<name> label (default: $KD_PROJECT or $BOAT_PROJECT)")
+	createCmd.Flags().BoolVar(&createForceFlag, "force", false, "allow cross-project bead creation when BOAT_PROJECT is set")
 }
