@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"sync"
 	"time"
 
 	beadsv1 "github.com/groblegark/kbeads/gen/beads/v1"
@@ -16,6 +17,10 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+// stopGateFailOpenThreshold is the number of consecutive blocked stop attempts
+// before the gate fails open and allows the agent through.
+const stopGateFailOpenThreshold = 3
+
 // BeadsServer implements the beadsv1.BeadsServiceServer interface.
 type BeadsServer struct {
 	beadsv1.UnimplementedBeadsServiceServer
@@ -24,6 +29,9 @@ type BeadsServer struct {
 	sseHub       *sseHub
 	hooksHandler *hooks.Handler
 	Presence     *presence.Tracker
+
+	stopMu       sync.Mutex
+	stopAttempts map[string]int // agent bead ID → consecutive blocked stop attempts
 }
 
 // NewBeadsServer returns a new BeadsServer backed by the given store and publisher.
@@ -34,6 +42,7 @@ func NewBeadsServer(s store.Store, p events.Publisher) *BeadsServer {
 		sseHub:       newSSEHub(),
 		hooksHandler: hooks.NewHandler(s, slog.Default()),
 		Presence:     presence.New(),
+		stopAttempts: make(map[string]int),
 	}
 }
 

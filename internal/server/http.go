@@ -61,6 +61,9 @@ func (s *BeadsServer) mergeBeadFields(ctx context.Context, id string, extra map[
 	if err != nil {
 		return fmt.Errorf("get bead: %w", err)
 	}
+	if bead == nil {
+		return nil // bead not found — nothing to merge
+	}
 
 	// Parse existing fields.
 	existing := make(map[string]any)

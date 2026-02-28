@@ -768,6 +768,113 @@ func TestDecisionExtractFieldsReportRequired(t *testing.T) {
 	}
 }
 
+// TestDecisionGateFailOpen verifies that after stopGateFailOpenThreshold
+// consecutive blocked stop attempts, the gate fails open and allows the agent
+// through with a warning instead of blocking indefinitely.
+func TestDecisionGateFailOpen(t *testing.T) {
+	_, _, h := newGatedTestServer()
+
+	const agentID = "kd-agent-failopen"
+
+	// Block threshold-1 times. Each should be blocked.
+	for i := 0; i < stopGateFailOpenThreshold-1; i++ {
+		rec := doJSON(t, h, "POST", "/v1/hooks/emit", map[string]any{
+			"agent_bead_id": agentID,
+			"hook_type":     "Stop",
+			"actor":         "test-agent",
+		})
+		requireStatus(t, rec, 200)
+		var r map[string]any
+		decodeJSON(t, rec, &r)
+		if r["block"] != true {
+			t.Fatalf("attempt %d: expected block=true, got %v", i+1, r)
+		}
+	}
+
+	// The next attempt should fail-open (not blocked) with a warning.
+	rec := doJSON(t, h, "POST", "/v1/hooks/emit", map[string]any{
+		"agent_bead_id": agentID,
+		"hook_type":     "Stop",
+		"actor":         "test-agent",
+	})
+	requireStatus(t, rec, 200)
+	var r map[string]any
+	decodeJSON(t, rec, &r)
+	if r["block"] == true {
+		t.Fatalf("fail-open: expected block=false after %d attempts, got blocked", stopGateFailOpenThreshold)
+	}
+	// Should include a fail-open warning.
+	warnings, _ := r["warnings"].([]any)
+	found := false
+	for _, w := range warnings {
+		if ws, ok := w.(string); ok && len(ws) > 0 {
+			if ws == "decision gate fail-open: allowed after repeated blocked attempts — create a decision next session" {
+				found = true
+			}
+		}
+	}
+	if !found {
+		t.Errorf("fail-open: expected fail-open warning in response, got %v", warnings)
+	}
+}
+
+// TestDecisionGateFailOpenResetsAfterAllow verifies that the fail-open counter
+// resets after a normal (non-fail-open) allow, so subsequent blocks start fresh.
+func TestDecisionGateFailOpenResetsAfterAllow(t *testing.T) {
+	_, gs, h := newGatedTestServer()
+
+	const agentID = "kd-agent-failopen-reset"
+
+	// Block once.
+	rec1 := doJSON(t, h, "POST", "/v1/hooks/emit", map[string]any{
+		"agent_bead_id": agentID,
+		"hook_type":     "Stop",
+		"actor":         "test-agent",
+	})
+	requireStatus(t, rec1, 200)
+	var r1 map[string]any
+	decodeJSON(t, rec1, &r1)
+	if r1["block"] != true {
+		t.Fatal("expected block on first attempt")
+	}
+
+	// Now satisfy via proper yield flow.
+	satisfyRec := doJSON(t, h, "POST", "/v1/agents/"+agentID+"/gates/decision/satisfy", nil)
+	requireStatus(t, satisfyRec, 200)
+	gs.beads[agentID] = &model.Bead{
+		ID:     agentID,
+		Fields: json.RawMessage(`{"gate_satisfied_by":"yield"}`),
+	}
+
+	// Allow through — counter should reset.
+	rec2 := doJSON(t, h, "POST", "/v1/hooks/emit", map[string]any{
+		"agent_bead_id": agentID,
+		"hook_type":     "Stop",
+		"actor":         "test-agent",
+	})
+	requireStatus(t, rec2, 200)
+	var r2 map[string]any
+	decodeJSON(t, rec2, &r2)
+	if r2["block"] == true {
+		t.Fatal("expected allow after gate satisfied")
+	}
+
+	// Now block again — should start from count 1 (not carry over).
+	for i := 0; i < stopGateFailOpenThreshold-1; i++ {
+		rec := doJSON(t, h, "POST", "/v1/hooks/emit", map[string]any{
+			"agent_bead_id": agentID,
+			"hook_type":     "Stop",
+			"actor":         "test-agent",
+		})
+		requireStatus(t, rec, 200)
+		var r map[string]any
+		decodeJSON(t, rec, &r)
+		if r["block"] != true {
+			t.Fatalf("post-reset attempt %d: expected block=true, got %v", i+1, r)
+		}
+	}
+}
+
 // TestDecisionCreateUnknownTypeGone verifies the old "unknown bead type" error
 // no longer occurs — regression test for the original bug.
 func TestDecisionCreateUnknownTypeGone(t *testing.T) {
